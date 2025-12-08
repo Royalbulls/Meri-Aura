@@ -1,0 +1,9 @@
+{
+  "name": "Meri Aura",
+  "description": "A customizable virtual friend persona that listens, talks, and changes appearance based on your wishes.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation",
+    "camera"
+  ]
+}
