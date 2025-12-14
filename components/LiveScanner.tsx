@@ -57,9 +57,10 @@ export const LiveScanner: React.FC<LiveScannerProps> = ({ isOpen, onClose, curre
     useEffect(() => {
         let intervalId: any;
         if (isOpen && !cameraError && !isFrozen && !isAnswering) {
+            // OPTIMIZATION: SLOW DOWN SCANNING TO 10 SECONDS TO SAVE API QUOTA
             intervalId = setInterval(() => {
                 if (!isThinking) runPassiveScan();
-            }, 3500); // Check every 3.5s
+            }, 10000); 
         }
         return () => clearInterval(intervalId);
     }, [isOpen, cameraError, isFrozen, isThinking, isAnswering]);

@@ -48,7 +48,13 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
 
   // --- AURA STYLES (Simpler & Faster) ---
   const getAuraStyle = () => {
-    if (avatarState.isTalking || isTalking) {
+    if (avatarState.isLoading) {
+        return {
+            background: `radial-gradient(circle at center, rgba(236, 72, 153, 0.4) 0%, rgba(17, 24, 39, 1) 70%)`,
+            opacity: 1,
+            animation: 'pulseFast 1s infinite ease-in-out'
+        };
+    } else if (avatarState.isTalking || isTalking) {
         return {
             background: `radial-gradient(circle at center, rgba(236, 72, 153, 0.5) 0%, rgba(17, 24, 39, 1) 70%)`,
             opacity: 0.8
@@ -98,9 +104,10 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
                    {/* Text Loading Indicator */}
                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-3 z-30">
                         <div className="w-12 h-12 border-4 border-t-pink-500 border-white/10 rounded-full animate-spin"></div>
-                        <span className="text-pink-400 text-xs font-bold tracking-[0.2em] animate-pulse bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
+                        <span className="text-pink-400 text-xs font-bold tracking-[0.2em] animate-pulse bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm shadow-lg border border-white/10">
                             MANIFESTING AURA...
                         </span>
+                        <span className="text-[10px] text-white/40">This can take up to 2 mins</span>
                    </div>
 
                    {/* Humanoid Shape Skeleton */}
@@ -128,7 +135,7 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
                     playsInline
                     autoPlay
                     className={`
-                        w-full h-full object-cover md:object-contain object-bottom filter drop-shadow-2xl transition-transform duration-500
+                        w-full h-full object-contain object-bottom filter drop-shadow-2xl transition-transform duration-500
                         ${isUserTyping ? 'scale-105 brightness-110' : 'scale-100'} 
                     `}
                  />
@@ -137,7 +144,7 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
                     src={avatarState.imageUrl} 
                     alt="AI Persona" 
                     className={`
-                        w-full h-full object-cover md:object-contain object-bottom
+                        w-full h-full object-contain object-bottom
                         filter drop-shadow-2xl
                         transition-transform duration-300
                     `}
@@ -154,7 +161,7 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
       {avatarState.videoUrl && onDownloadVideo && !avatarState.isLoading && (
           <button 
             onClick={onDownloadVideo}
-            className="absolute top-20 left-4 z-40 bg-black/60 backdrop-blur-md text-white p-3 rounded-full border border-white/20 hover:bg-pink-600 transition-colors shadow-xl group"
+            className="absolute top-20 left-4 z-20 bg-black/60 backdrop-blur-md text-white p-3 rounded-full border border-white/20 hover:bg-pink-600 transition-colors shadow-xl group pointer-events-auto"
             title="Save Avatar Video"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 group-hover:scale-110 transition-transform">
@@ -167,7 +174,7 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
       {!avatarState.videoUrl && avatarState.imageUrl && onDownloadImage && !avatarState.isLoading && (
           <button 
             onClick={onDownloadImage}
-            className="absolute top-20 left-4 z-40 bg-black/60 backdrop-blur-md text-white p-3 rounded-full border border-white/20 hover:bg-pink-600 transition-colors shadow-xl group"
+            className="absolute top-20 left-4 z-20 bg-black/60 backdrop-blur-md text-white p-3 rounded-full border border-white/20 hover:bg-pink-600 transition-colors shadow-xl group pointer-events-auto"
             title="Save Aura Image"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 group-hover:scale-110 transition-transform">
@@ -180,7 +187,7 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
       {!avatarState.videoUrl && !avatarState.isLoading && avatarState.imageUrl && onAnimateRequest && (
           <button 
             onClick={onAnimateRequest}
-            className="absolute bottom-24 right-4 z-40 bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-full text-xs font-bold border border-white/20 hover:bg-pink-600 transition-colors flex items-center gap-2"
+            className="absolute bottom-24 right-4 z-20 bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-full text-xs font-bold border border-white/20 hover:bg-pink-600 transition-colors flex items-center gap-2 pointer-events-auto"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                <path d="M11.25 4.533A9.707 9.707 0 006 3.755c-3.763 0-6.16 2.895-6 6.06.167 3.29 2.7 5.276 3.64 6.643.546.79 1.154 1.529 1.815 2.203.273.28.69.28.963 0 1.25-1.276 2.37-2.675 3.325-4.162.775-1.207 1.255-2.584 1.392-4.008a6.38 6.38 0 00-1.054-4.524 6.38 6.38 0 00-4.523-1.054.75.75 0 01-.19-.19z" />

@@ -35,11 +35,26 @@ const cosineSimilarity = (vecA: number[], vecB: number[]): number => {
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
+// Helper: Get relative time string
+const getRelativeTime = (timestamp: number) => {
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return `${minutes} mins ago`;
+    if (hours < 24) return `${hours} hours ago`;
+    if (days === 1) return "Yesterday";
+    if (days < 7) return `${days} days ago`;
+    return "A while back";
+};
+
 export const memoryService = {
     // 1. Save a new memory (User text -> Vector -> DB)
     addMemory: async (text: string): Promise<void> => {
-        // Lower threshold to capture short emotional bursts like "I am sad"
-        if (text.length < 4) return; 
+        // SAVING TOKENS: Only memorize meaningful messages > 15 chars
+        if (text.length < 15) return; 
 
         try {
             const vector = await getEmbedding(text);
@@ -63,6 +78,9 @@ export const memoryService = {
 
     // 2. Search for relevant memories based on current query
     searchMemories: async (queryText: string): Promise<string | null> => {
+        // Optimization: Don't search memory for very short queries
+        if (queryText.length < 5) return null;
+
         try {
             const queryVector = await getEmbedding(queryText);
             const db = await openDB();
@@ -89,13 +107,19 @@ export const memoryService = {
                     // Sort by relevance (highest score first)
                     scored.sort((a, b) => b.score - a.score);
 
-                    // Filter: Lowered threshold to 0.55 to be more inclusive of loose associations
-                    const relevant = scored.filter(s => s.score > 0.55).slice(0, 4); // Increased to top 4
+                    // Filter: Threshold 0.6 for decent relevance
+                    // Take top 4 to provide richer context
+                    const relevant = scored.filter(s => s.score > 0.60).slice(0, 4);
 
                     if (relevant.length > 0) {
                         console.log("🧠 Memories Found:", relevant.map(r => `${r.text} (${r.score.toFixed(2)})`));
-                        // Combine them into a context string
-                        resolve(relevant.map(r => r.text).join(" | "));
+                        
+                        // Format specifically for the LLM to understand timeline
+                        const formattedMemories = relevant.map(r => 
+                            `[${getRelativeTime(r.timestamp)} the user said]: "${r.text}"`
+                        ).join("\n");
+                        
+                        resolve(formattedMemories);
                     } else {
                         resolve(null);
                     }

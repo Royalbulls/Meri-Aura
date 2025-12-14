@@ -1,175 +1,420 @@
 
-// ... existing imports ...
-import { GoogleGenAI, Modality } from "@google/genai";
-import { Persona, ChatResponse, AstrologyDetails, PersonalitySettings, Message, Sender } from "../types";
+import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
+import { AstrologyDetails, GenesisStep, NeuralContext, Persona, PersonalitySettings } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// ... existing generateChatResponse ...
-export const generateChatResponse = async (
-  history: Message[],
-  message: string,
-  persona: Persona,
-  location: { latitude: number; longitude: number } | undefined,
-  context: string | null,
-  personality: PersonalitySettings
-): Promise<ChatResponse> => {
-  const systemInstruction = `
-    You are ${persona.name}.
-    ${persona.description}
+// --- UTILITIES ---
 
-    Current Context:
-    - User Location: ${location ? `${location.latitude}, ${location.longitude}` : 'Unknown'}
-    - Memory Context: ${context || 'None'}
-    - Personality Traits: Playfulness: ${personality.playfulness}%, Empathy: ${personality.empathy}%, Directness: ${personality.directness}%
-
-    Respond naturally.
-  `;
-
-  // Format history for the model
-  const contents = history.map(h => {
-      const parts: any[] = [{ text: h.text }];
-      // Include image attachment if present and from user (e.g. vision scan or upload)
-      if (h.sender === Sender.User && h.attachmentUrl && h.attachmentUrl.startsWith('data:image')) {
-          try {
-              const mimeType = h.attachmentUrl.split(';')[0].split(':')[1];
-              const base64Data = h.attachmentUrl.split(',')[1];
-              if (mimeType && base64Data) {
-                  parts.push({
-                      inlineData: {
-                          data: base64Data,
-                          mimeType: mimeType
-                      }
-                  });
-              }
-          } catch (e) {
-              console.warn("Failed to attach image to message history", e);
-          }
-      }
-      return {
-          role: h.sender === Sender.User ? 'user' : 'model',
-          parts: parts
-      };
-  });
-  
-  // Add user message
-  contents.push({ role: 'user', parts: [{ text: message }] });
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: contents,
-    config: {
-        systemInstruction: systemInstruction,
-        tools: [{ googleSearch: {} }, { googleMaps: {} }],
-    }
-  });
-
-  return {
-    text: response.text || "I am speechless.",
-    groundingMetadata: response.candidates?.[0]?.groundingMetadata,
-    directionsUrl: undefined 
-  };
-};
-
-// ... existing generateAvatarImage ...
-export const generateAvatarImage = async (prompt: string): Promise<string> => {
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: { parts: [{ text: prompt }] },
-        config: {} // No responseMimeType for gemini-2.5-flash-image
-    });
-
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-            return `data:image/png;base64,${part.inlineData.data}`;
-        }
-    }
-    throw new Error("No image generated");
-};
-
-// ... existing generateAvatarVideo ...
-export const generateAvatarVideo = async (imageUrl: string, prompt: string): Promise<string> => {
-    const base64Data = imageUrl.split(',')[1];
-    
-    let operation = await ai.models.generateVideos({
-        model: 'veo-3.1-fast-generate-preview',
-        prompt: prompt,
-        image: {
-            imageBytes: base64Data,
-            mimeType: 'image/png'
-        },
-        config: {
-            numberOfVideos: 1,
-            resolution: '720p',
-            aspectRatio: '9:16'
-        }
-    });
-    
-    while (!operation.done) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        operation = await ai.operations.getVideosOperation({operation: operation});
-    }
-    
-    const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
-    if (!videoUri) throw new Error("Video generation failed");
-    
-    const vidResponse = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
-    const blob = await vidResponse.blob();
-    return URL.createObjectURL(blob);
-};
-
-// ... existing generateSpeech ...
-export const generateSpeech = async (text: string, voiceName: string, audioContext: AudioContext): Promise<AudioBuffer> => {
-    // 1. Sanitize Text: Remove HTML tags which confuse the TTS model
-    const cleanText = text.replace(/<[^>]*>?/gm, " ").replace(/\s+/g, " ").trim().slice(0, 600);
-    
-    if (!cleanText) throw new Error("Text is empty after cleanup");
-
-    // 2. Validate Voice
-    const validVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'];
-    const voice = validVoices.includes(voiceName) ? voiceName : 'Kore';
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-preview-tts',
-        contents: { parts: [{ text: cleanText }] },
-        config: {
-            responseModalities: ['AUDIO' as any], // Use string to avoid enum import issues
-            speechConfig: {
-                voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName: voice }
-                }
-            }
-        }
-    });
-
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error("No audio generated");
-
-    const binaryString = atob(base64Audio);
+const decodeBase64 = (base64: string) => {
+    const binaryString = atob(base64);
     const len = binaryString.length;
     const bytes = new Uint8Array(len);
     for (let i = 0; i < len; i++) {
         bytes[i] = binaryString.charCodeAt(i);
     }
-    
-    const dataInt16 = new Int16Array(bytes.buffer);
-    const numChannels = 1;
-    const sampleRate = 24000;
-    const frameCount = dataInt16.length / numChannels;
-    const buffer = audioContext.createBuffer(numChannels, frameCount, sampleRate);
-    
-    const channelData = buffer.getChannelData(0);
-    for (let i = 0; i < frameCount; i++) {
-        channelData[i] = dataInt16[i] / 32768.0;
-    }
-    
-    return buffer;
+    return bytes;
 };
 
-// ... existing generatePersonaFromAstrology ...
+export const createWavHeader = (pcmData: Uint8Array, sampleRate: number = 24000, numChannels: number = 1, bitsPerSample: number = 16): Uint8Array => {
+    const header = new ArrayBuffer(44);
+    const view = new DataView(header);
+    
+    const dataSize = pcmData.length;
+    const fileSize = 36 + dataSize;
+    const blockAlign = (numChannels * bitsPerSample) / 8;
+    const byteRate = sampleRate * blockAlign;
+
+    // RIFF identifier
+    writeString(view, 0, 'RIFF');
+    // file length
+    view.setUint32(4, fileSize, true);
+    // RIFF type
+    writeString(view, 8, 'WAVE');
+    // format chunk identifier
+    writeString(view, 12, 'fmt ');
+    // format chunk length
+    view.setUint32(16, 16, true);
+    // sample format (raw)
+    view.setUint16(20, 1, true);
+    // channel count
+    view.setUint16(22, numChannels, true);
+    // sample rate
+    view.setUint32(24, sampleRate, true);
+    // byte rate (sample rate * block align)
+    view.setUint32(28, byteRate, true);
+    // block align (channel count * bytes per sample)
+    view.setUint16(32, blockAlign, true);
+    // bits per sample
+    view.setUint16(34, bitsPerSample, true);
+    // data chunk identifier
+    writeString(view, 36, 'data');
+    // data chunk length
+    view.setUint32(40, dataSize, true);
+
+    const wavFile = new Uint8Array(header.byteLength + pcmData.byteLength);
+    wavFile.set(new Uint8Array(header), 0);
+    wavFile.set(pcmData, header.byteLength);
+
+    return wavFile;
+};
+
+const writeString = (view: DataView, offset: number, string: string) => {
+    for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+    }
+};
+
+const arrayBufferToAudioBuffer = async (arrayBuffer: ArrayBuffer, ctx: AudioContext): Promise<AudioBuffer> => {
+    return await ctx.decodeAudioData(arrayBuffer);
+};
+
+// --- AUTO TOOL DEFINITIONS ---
+const AURA_TOOLS: FunctionDeclaration[] = [
+    {
+        name: "trend_hunter",
+        description: "Analyze real-time market trends, viral topics, or find money-making opportunities on Google/YouTube.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                query: { type: Type.STRING, description: "The trend topic to search for (e.g. 'Money making trends India', 'Viral food')." }
+            },
+            required: ["query"]
+        }
+    },
+    {
+        name: "news_reporter",
+        description: "Get the latest news reports, headlines, or updates on specific topics.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                topic: { type: Type.STRING, description: "The news topic (e.g. 'Tech', 'Crypto', 'Politics')." }
+            },
+            required: ["topic"]
+        }
+    },
+    {
+        name: "music_composer",
+        description: "Compose a song, lyrics, or music based on a theme.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                theme: { type: Type.STRING, description: "The theme or genre of the song." }
+            },
+            required: ["theme"]
+        }
+    },
+    {
+        name: "website",
+        description: "Create a business website or landing page code.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                description: { type: Type.STRING, description: "Description of the business and website requirements." }
+            },
+            required: ["description"]
+        }
+    },
+    {
+        name: "aura_viral",
+        description: "Generate a viral social media post (Insta/Twitter/LinkedIn).",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                topic: { type: Type.STRING, description: "What the post is about." }
+            },
+            required: ["topic"]
+        }
+    },
+    {
+        name: "comic",
+        description: "Create a comic strip script.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                story: { type: Type.STRING, description: "The story idea for the comic." }
+            },
+            required: ["story"]
+        }
+    },
+    {
+        name: "aura_podcast",
+        description: "Create a podcast script or debate between two characters.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                topic: { type: Type.STRING, description: "The podcast topic." }
+            },
+            required: ["topic"]
+        }
+    }
+];
+
+// --- CHAT & CORE ---
+
+export const generateChatResponse = async (
+    history: any[],
+    text: string,
+    persona: Persona,
+    location: any,
+    context: string | null,
+    personality: PersonalitySettings
+) => {
+    const systemInstruction = `
+    You are ${persona.name}.
+    Description: ${persona.description}
+    Stats: Playfulness ${personality.playfulness}%, Empathy ${personality.empathy}%, Directness ${personality.directness}%.
+    ${context ? `RELEVANT MEMORIES:\n${context}` : ''}
+    
+    CORE DIRECTIVE:
+    You have access to powerful tools. **USE THEM AUTOMATICALLY** if the user's request matches a tool's capability.
+    - If user asks for trends/money -> call 'trend_hunter'.
+    - If user asks for news -> call 'news_reporter'.
+    - If user asks for a song/lyrics -> call 'music_composer'.
+    - If user asks for a website -> call 'website'.
+    - If user asks for a viral post -> call 'aura_viral'.
+    
+    Otherwise, reply naturally. Keep it concise unless asked for detail.
+    `;
+    
+    let tools: any[] = [...AURA_TOOLS]; // Add Auto Tools
+    let toolConfig: any = undefined;
+
+    // Add Google Search/Maps tools if relevant
+    tools.push({ googleSearch: {} });
+    tools.push({ googleMaps: {} });
+    
+    if (location) {
+        toolConfig = {
+            retrievalConfig: {
+                latLng: {
+                    latitude: location.latitude,
+                    longitude: location.longitude
+                }
+            }
+        };
+    }
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+            ...history.map(m => ({ role: m.sender === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })),
+            { role: 'user', parts: [{ text: text }] }
+        ],
+        config: {
+            systemInstruction,
+            tools: tools.map(t => t.functionDeclarations ? { functionDeclarations: [t] } : t), // Format mix of Google tools and Custom Functions
+            toolConfig
+        }
+    });
+
+    // Check for Function Call
+    const functionCall = response.candidates?.[0]?.content?.parts?.find(p => p.functionCall)?.functionCall;
+    
+    return {
+        text: response.text,
+        groundingMetadata: response.candidates?.[0]?.groundingMetadata,
+        directionsUrl: (response.candidates?.[0]?.groundingMetadata as any)?.groundingChunks?.find((c: any) => c.web?.uri)?.web?.uri,
+        toolCall: functionCall // Return tool call if present
+    };
+};
+
+export const transcribeAudio = async (base64Audio: string, mimeType: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: {
+            parts: [
+                { inlineData: { mimeType: mimeType, data: base64Audio.split(',')[1] } },
+                { text: "Transcribe this audio exactly." }
+            ]
+        }
+    });
+    return response.text;
+};
+
+export const getEmbedding = async (text: string): Promise<number[]> => {
+    const result = await ai.models.embedContent({
+        model: 'text-embedding-004',
+        contents: [
+            {
+                parts: [
+                    { text: text }
+                ]
+            }
+        ]
+    });
+    return result.embedding?.values || [];
+};
+
+// --- AVATAR & MEDIA ---
+
+export const generateAvatarImage = async (prompt: string): Promise<string> => {
+    try {
+        // 1. Try Nano Banana (Gemini Image) first
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+                parts: [{ text: prompt }]
+            },
+            config: {
+                imageConfig: {
+                    aspectRatio: "9:16"
+                }
+            }
+        });
+
+        for (const part of response.candidates[0].content.parts) {
+            if (part.inlineData) {
+                return `data:image/png;base64,${part.inlineData.data}`;
+            }
+        }
+    } catch (e: any) {
+        if (e.message?.includes('404') || e.status === 404 || e.message?.includes('NOT_FOUND')) {
+            console.log("Gemini 2.5 Flash Image 404, falling back to Imagen 4.0");
+            try {
+                // 2. Fallback to Imagen 4.0
+                const response = await ai.models.generateImages({
+                    model: 'imagen-4.0-generate-001',
+                    prompt: prompt,
+                    config: {
+                        numberOfImages: 1,
+                        aspectRatio: '9:16', 
+                        outputMimeType: 'image/jpeg'
+                    }
+                });
+                return `data:image/jpeg;base64,${response.generatedImages[0].image.imageBytes}`;
+            } catch (e2: any) {
+                console.log("Imagen 4.0 404, falling back to Gemini 3 Pro Image");
+                // 3. Fallback to Gemini 3 Pro Image (if available/whitelisted)
+                const response = await ai.models.generateContent({
+                    model: 'gemini-3-pro-image-preview',
+                    contents: {
+                        parts: [{ text: prompt }]
+                    },
+                    config: {
+                        imageConfig: {
+                            aspectRatio: "9:16"
+                        }
+                    }
+                });
+                for (const part of response.candidates[0].content.parts) {
+                    if (part.inlineData) {
+                        return `data:image/png;base64,${part.inlineData.data}`;
+                    }
+                }
+            }
+        }
+        throw e;
+    }
+    throw new Error("No image generated");
+};
+
+export const generateAvatarVideo = async (imageUrl: string, prompt: string): Promise<string> => {
+    const imageBase64 = imageUrl.split(',')[1];
+    try {
+        let operation = await ai.models.generateVideos({
+            model: 'veo-3.1-fast-generate-preview',
+            prompt: prompt,
+            image: {
+                imageBytes: imageBase64,
+                mimeType: 'image/jpeg'
+            },
+            config: {
+                numberOfVideos: 1,
+                resolution: '720p',
+                aspectRatio: '9:16'
+            }
+        });
+
+        while (!operation.done) {
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            operation = await ai.operations.getVideosOperation({ operation: operation });
+        }
+
+        const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
+        if (!uri) throw new Error("Video generation failed");
+        
+        // Return URI with API key for fetching
+        return `${uri}&key=${process.env.API_KEY}`;
+    } catch (e: any) {
+        if (e.message?.includes('404') || e.status === 404 || e.message?.includes('NOT_FOUND')) {
+            throw new Error("Video model not found or access denied. Please select a paid API key for Veo.");
+        }
+        throw e;
+    }
+};
+
+export const generateSpeech = async (text: string, voiceName: string, ctx: AudioContext): Promise<AudioBuffer> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-preview-tts',
+        contents: { parts: [{ text }] },
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: voiceName || 'Kore' }
+                }
+            }
+        }
+    });
+
+    const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64) throw new Error("No audio generated");
+
+    // Decode base64 to raw PCM
+    const pcmData = decodeBase64(base64);
+    
+    // Create WAV header so AudioContext can decode it
+    const wavBytes = createWavHeader(pcmData);
+    
+    return await arrayBufferToAudioBuffer(wavBytes.buffer, ctx);
+};
+
+export const generateSpeechDownloadUrl = async (text: string, voiceName: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-preview-tts',
+        contents: { parts: [{ text }] },
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: voiceName || 'Kore' }
+                }
+            }
+        }
+    });
+
+    const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64) throw new Error("No audio generated");
+
+    const pcmData = decodeBase64(base64);
+    const wavBytes = createWavHeader(pcmData);
+    const blob = new Blob([wavBytes], { type: 'audio/wav' });
+    return URL.createObjectURL(blob);
+};
+
+// --- CREATIVE TOOLS ---
+
 export const generatePersonaFromAstrology = async (details: AstrologyDetails): Promise<Persona> => {
-    const prompt = `Create a detailed persona for an AI agent based on this astrology data: Name: ${details.name}, DOB: ${details.dob}, Time: ${details.time}, Place: ${details.place}, Gender: ${details.gender}, Genre: ${details.selectedGenre}.
-    Return JSON with fields: id, name, description, visualPrompt, voiceName.`;
+    const prompt = `
+    Create a unique AI Persona based on these astrology details:
+    Name: ${details.name}, DOB: ${details.dob}, Place: ${details.place}, Genre: ${details.selectedGenre}, Gender: ${details.gender}.
+    
+    Analyze the astrological significance (Sun sign, Moon sign, Ascendant) and create a "Soul Vibe".
+    
+    Generate a persona JSON with:
+    {
+        "id": "cosmic_${Date.now()}",
+        "name": "A unique mystical name based on the stars",
+        "description": "Short bio explaining their cosmic origin and expertise...",
+        "visualPrompt": "Highly detailed visual description for avatar generation. MUST INCLUDE: Specific zodiac symbols (e.g. Lion for Leo, Scales for Libra), colors associated with their ruling planet, and clothing style matching '${details.selectedGenre}'. Cinematic lighting, 8k.",
+        "voiceName": "Fenrir",
+        "isCustom": true,
+        "focusGenre": "${details.selectedGenre}",
+        "soulVibe": "e.g. 'Fiery Leader' or 'Intuitive Healer'"
+    }
+    Return ONLY valid JSON.
+    `;
     
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -177,575 +422,457 @@ export const generatePersonaFromAstrology = async (details: AstrologyDetails): P
         config: { responseMimeType: 'application/json' }
     });
     
-    const json = JSON.parse(response.text || '{}');
-    return {
-        ...json,
-        id: `cosmic_${Date.now()}`,
-        isCustom: true
-    };
+    return JSON.parse(response.text);
 };
 
-// ... existing generateCollabImage ...
-export const generateCollabImage = async (personaPrompt: string, userPhotoBase64: string, style: string): Promise<string> => {
-    const base64Data = userPhotoBase64.split(',')[1];
-    const mimeType = userPhotoBase64.split(';')[0].split(':')[1];
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: {
-            parts: [
-                { inlineData: { data: base64Data, mimeType } },
-                { text: `Create a collaboration image. Style: ${style}. Context: The user in the photo meeting the character described as: ${personaPrompt}` }
-            ]
-        }
-    });
-
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-            return `data:image/png;base64,${part.inlineData.data}`;
-        }
-    }
-    return '';
-};
-
-// ... existing analyzeUserFace ...
-export const analyzeUserFace = async (base64Image: string): Promise<string> => {
-    const base64Data = base64Image.split(',')[1];
-    const mimeType = base64Image.split(';')[0].split(':')[1];
+export const generateCollabImage = async (visualPrompt: string, userPhotoUrl: string, style: string): Promise<string> => {
+    const base64User = userPhotoUrl.split(',')[1];
     
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: {
-            parts: [
-                { inlineData: { data: base64Data, mimeType } },
-                { text: "Describe the person in this image in detail (appearance, expression, clothing)." }
-            ]
-        }
-    });
-    return response.text || "";
-};
-
-// ... existing transcribeAudio ...
-export const transcribeAudio = async (base64Audio: string, mimeType: string): Promise<string> => {
-    const base64Data = base64Audio.split(',')[1];
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: {
-            parts: [
-                { inlineData: { data: base64Data, mimeType } },
-                { text: "Transcribe this audio." }
-            ]
-        }
-    });
-    return response.text || "";
-};
-
-// ... existing getEmbedding ...
-export const getEmbedding = async (text: string): Promise<number[]> => {
-    if (!text || !text.trim()) return [];
     try {
-        const response = await ai.models.embedContent({
-            model: 'text-embedding-004',
-            content: { parts: [{ text }] }
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+                parts: [
+                    { inlineData: { mimeType: 'image/jpeg', data: base64User } },
+                    { text: `Add a character described as "${visualPrompt}" standing next to the person in this photo. Style: ${style}. High quality.` }
+                ]
+            }
         });
-        if (response.embedding?.values) {
-            return response.embedding.values;
+
+        const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+        if (part?.inlineData?.data) {
+            return `data:image/jpeg;base64,${part.inlineData.data}`;
         }
-        console.warn("No embedding values returned from API");
-        return [];
-    } catch (e) {
-        console.error("Embedding error:", e);
-        return [];
+    } catch (e: any) {
+        if (e.message?.includes('404')) {
+            throw new Error("Collab features currently unavailable in this region (Model 404).");
+        }
+        throw e;
     }
+    throw new Error("No image generated");
 };
 
-// ... existing getWebsiteAdvice ...
-export const getWebsiteAdvice = async (url: string): Promise<string> => {
-    const prompt = `
-        The user is browsing this URL/Topic: "${url}".
-        
-        ACT AS A CYBER-SECURITY EXPERT AND SHOPPING/RESEARCH ASSISTANT.
-        
-        MISSION:
-        1. Identify what this website/topic is.
-        2. Give a "System Check" security rating (Safe/Phishing/Scam risk).
-        3. Provide 3 specific tips for this site (e.g., if shopping: "Check for coupons", if reading: "Verify sources").
-        
-        Keep it concise, friendly, and actionable. Use emojis.
-        Output format HTML (Inline CSS).
-    `;
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-            tools: [{ googleSearch: {} }]
-        }
-    });
-    
-    return response.text || "Analyzing site data...";
-};
-
-// ... existing performWebSearch ...
-export const performWebSearch = async (query: string): Promise<string> => {
-    const prompt = `
-        ACT AS A MODERN SEARCH ENGINE (Google AI Overview).
-        USER QUERY: "${query}"
-        
-        MISSION: Perform a real Google Search using your tools and display the results as a clean list.
-        
-        FORMAT REQUIREMENTS:
-        - Return RAW HTML. No Markdown.
-        - Style it exactly like Google Search Results in Dark Mode.
-        - **IMPORTANT:** Use <a> tags for titles so the user can click them.
-        
-        OUTPUT STRUCTURE (HTML):
-        <div style="font-family: sans-serif; padding: 20px; color: #e8eaed;">
-            <!-- AI Summary (Optional but good) -->
-            <div style="background: #303134; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
-                <h3 style="margin: 0 0 8px 0; color: #fff; font-size: 16px;">✨ AI Overview</h3>
-                <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #bdc1c6;">[Provide a 2-sentence direct answer to the query here]</p>
-            </div>
-
-            <!-- Search Results List -->
-            <div class="search-result" style="margin-bottom: 30px;">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                    <div style="background: #202124; border-radius: 50%; width: 16px; height: 16px;"></div>
-                    <span style="font-size: 12px; color: #bdc1c6;">Domain Name</span>
-                </div>
-                <a href="URL_HERE" style="font-size: 20px; color: #8ab4f8; text-decoration: none; display: block; margin-bottom: 4px; hover:underline;">Page Title Here</a>
-                <div style="font-size: 14px; color: #9aa0a6; display: -webkit-box; -webkit-line-clamp: 2; overflow: hidden;">Snippet description of the page content goes here...</div>
-            </div>
-            
-            <!-- Repeat for 4-5 top results -->
-        </div>
-    `;
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: { tools: [{ googleSearch: {} }] }
-    });
-    
-    return response.text || "<div style='padding:20px; color:white;'>No results found.</div>";
-};
-
-// ... existing generateCreativeContent ...
 export const generateCreativeContent = async (
-    action: string, 
+    toolAction: string, 
     input: string, 
     persona: Persona, 
     imageInput?: string, 
     option?: any, 
-    location?: { latitude: number, longitude: number }
-): Promise<{ text: string, code?: string, imageUrl?: string, earthLocation?: string, groundingMetadata?: any }> => {
+    location?: any
+): Promise<any> => {
+    let model = 'gemini-2.5-flash';
+    let systemInstruction = `You are ${persona.name}. Task: ${toolAction}. Input: ${input}.`;
+    let responseMimeType = 'text/plain';
+    let responseSchema: any = undefined;
+    let tools: any[] = [];
     
-    // ... existing check_location ...
-    if (action === 'check_location') {
-         if (!location) return { text: "Location unavailable." };
-         const prompt = `Using LatLng (${location.latitude}, ${location.longitude}), identify exact address, landmarks, and what is special nearby.`;
-         const response = await ai.models.generateContent({model: 'gemini-2.5-flash', contents: [{role: 'user', parts: [{text: prompt}]}], config: {tools: [{googleMaps: {}}]}});
-         return { text: response.text || "Checking location...", groundingMetadata: response.candidates?.[0]?.groundingMetadata };
-    }
-
-    // ... existing youtube_search ...
-    if (action === 'youtube_search') {
-         const prompt = `
-            Find the best YouTube video for the topic: "${input}".
-            
-            OUTPUT FORMAT:
-            1. Video Title
-            2. Brief description of what happens in it.
-            3. The direct YouTube URL (e.g., https://www.youtube.com/watch?v=...)
-            
-            Ensure you provide a valid link found via Google Search.
-         `;
-         const response = await ai.models.generateContent({
-             model: 'gemini-2.5-flash',
-             contents: prompt,
-             config: { tools: [{googleSearch: {}}] }
-         });
-         return { 
-             text: response.text || "Searching YouTube...", 
-             groundingMetadata: response.candidates?.[0]?.groundingMetadata 
-         };
-    }
-
-    // ... existing web_browser ...
-    if (action === 'web_browser') {
-         // USE THE NEW SEARCH FUNCTION FOR BETTER RESULTS
-         const searchHtml = await performWebSearch(input);
-         return { 
-             text: searchHtml, 
-             // Pass generic metadata if any
-             groundingMetadata: undefined 
-         };
-    }
-
-    // ... existing link_summary ...
-    if (action === 'link_summary') {
-        const prompt = `
-            Analyze and summarize the content of this link/query: "${input}".
-            Provide key takeaways, main points, and any relevant details.
-        `;
-        const response = await ai.models.generateContent({
-             model: 'gemini-2.5-flash',
-             contents: prompt,
-             config: { tools: [{googleSearch: {}}] }
-         });
-         return { 
-             text: response.text || "Analyzing link...", 
-             groundingMetadata: response.candidates?.[0]?.groundingMetadata 
-         };
-    }
-
-    // ... existing blog_post ...
-    if (action === 'blog_post') {
-        const prompt = `
-            ACT AS A WORLD-CLASS BLOGGER AND EDITOR.
-            TOPIC: "${input}"
-            
-            MISSION: Write a highly creative, engaging, accurate, and detailed blog post.
-            
-            FORMAT REQUIREMENTS (INLINE CSS FOR EXTERNAL COMPATIBILITY):
-            - Return ONLY the HTML content.
-            - **DO NOT use CSS classes.** Use inline 'style' attributes for ALL styling.
-            - **Container:** Wrap everything in <div style="background-color: #111827; color: #f3f4f6; padding: 24px; border-radius: 12px; font-family: sans-serif; line-height: 1.6;">
-            - **Title:** <h1 style="font-size: 2.5rem; font-weight: 800; background: linear-gradient(to right, #ec4899, #8b5cf6); -webkit-background-clip: text; color: transparent; margin-bottom: 20px;">...</h1>
-            - **Headings:** <h2 style="font-size: 1.5rem; font-weight: 600; color: #fff; border-left: 4px solid #ec4899; padding-left: 12px; margin-top: 30px; margin-bottom: 15px;">...</h2>
-            - **Paragraphs:** <p style="color: #d1d5db; margin-bottom: 15px;">...</p>
-            - **Lists:** <ul style="color: #d1d5db; margin-bottom: 20px; padding-left: 20px;">...</ul>
-            - **Highlights:** <span style="color: #fcd34d; font-weight: bold;">...</span>
-            - **Blockquotes:** <blockquote style="border-left: 4px solid #8b5cf6; margin: 24px 0; font-style: italic; color: #9ca3af; background-color: rgba(255,255,255,0.05); padding: 16px; border-radius: 0 8px 8px 0;">...</blockquote>
-            
-            CONTENT GUIDELINES:
-            - Use Google Search for facts.
-            - Structure with Intro, Body, Conclusion.
-        `;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: { 
-                tools: [{ googleSearch: {} }]
-            }
-        });
-
-        return { 
-            text: response.text || "Generating blog...", 
-            groundingMetadata: response.candidates?.[0]?.groundingMetadata 
-        };
-    }
-
-    // ... existing vision_scan ...
-    if (action === 'vision_scan') {
-        // FAST, PASSIVE SCAN MODE
-        const parts: any[] = [{ text: `
-            Identify the primary subject in this view. Return ONLY 3-5 words describing it. 
-            Example: "Laptop on a wooden table" or "A red sports car".
-            Do not use markdown. Do not be verbose.
-        ` }];
-        
-        if (imageInput) {
-            const base64Data = imageInput.split(',')[1];
-            const mimeType = imageInput.split(';')[0].split(':')[1];
-            parts.push({ inlineData: { data: base64Data, mimeType } });
-        } else {
-             return { text: "Blind" };
-        }
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: { parts }
-        });
-        
-        return { text: response.text || "Analyzing..." };
-    }
-
-    // ... existing smart_measure ...
-    if (action === 'smart_measure') {
-        const parts: any[] = [{ text: `
-            ACT AS A UNIVERSAL REALITY SCANNER (Project Astra Style).
-            USER QUERY: "${input}"
-            
-            MISSION: Analyze the image deeply. Identify objects, read text, estimate measurements, or explain context.
-            
-            FORMAT REQUIREMENTS (Clean HTML for HUD):
-            - Return ONLY HTML.
-            - **Container:** <div style="background-color: rgba(0,0,0,0.6); color: #fff; padding: 20px; border-radius: 20px; font-family: sans-serif; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);">
-            - **Header:** <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; opacity: 0.7; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;"> <span>⚡ INTELLIGENT VISION</span> </div>
-            - **Main Answer:** <h2 style="font-size: 1.2rem; font-weight: 500; margin-bottom: 10px; line-height: 1.4;">...</h2>
-            - **Details:** <p style="font-size: 0.9rem; color: rgba(255,255,255,0.8); line-height: 1.6;">...</p>
-            
-            TOOLS:
-            - **Google Maps:** Use Lat/Lng to identify location context if provided.
-            - **Google Search:** Find prices, history, facts.
-        ` }];
-
-        if (imageInput) {
-            const base64Data = imageInput.split(',')[1];
-            const mimeType = imageInput.split(';')[0].split(':')[1];
-            parts.push({ inlineData: { data: base64Data, mimeType } });
-        } else {
-            return { text: "No visual feed available." };
-        }
-        
-        let toolConfig: any = undefined;
-        if (location) {
-             toolConfig = {
-                retrievalConfig: {
-                  latLng: {
-                    latitude: location.latitude,
-                    longitude: location.longitude
-                  }
-                }
-             };
-        }
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: { parts },
-            config: {
-                tools: [{ googleSearch: {} }, { googleMaps: {} }],
-                toolConfig: toolConfig
-            }
-        });
-
-        return { 
-            text: response.text || "Scan complete.", 
-            groundingMetadata: response.candidates?.[0]?.groundingMetadata 
-        };
-    }
-
-    // --- NEW HANDLER: LIVE VASTU ---
-    if (action === 'live_vastu') {
-        if (!location) return { text: "⚠️ Location is required for Live Vastu Compass. Please enable GPS." };
-
-        const parts: any[] = [{ text: `
-            ACT AS A VASTU SHASTRA EXPERT WITH SATELLITE VISION.
-            
-            USER LOCATION: Lat ${location.latitude}, Lng ${location.longitude}.
-            USER NOTES: "${input}"
-            
-            MISSION:
-            1. Use Google Maps to identify the exact address and orient yourself (North, East, etc.).
-            2. Analyze the surroundings using your knowledge of the map (Are there water bodies, hospitals, temples, or heavy structures nearby?).
-            3. Apply Vastu Principles to this specific coordinate.
-            4. Is this location auspicious (Shubh)?
-            
-            FORMAT REQUIREMENTS (HTML):
-            - Return ONLY HTML.
-            - **Container:** <div style="background-color: #312e81; color: #e0e7ff; padding: 24px; border-radius: 12px; font-family: sans-serif; border: 1px solid #6366f1;">
-            - **Header:** <h1 style="font-size: 1.8rem; font-weight: bold; color: #fbbf24; text-align: center; margin-bottom: 20px;">🧭 Live Vastu Compass</h1>
-            - **Location:** <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem; text-align: center;">📍 Analysis for: [Insert Detected Address]</div>
-            - **Vastu Score:** <div style="font-size: 2rem; font-weight: 800; text-align: center; margin: 20px 0; color: #4ade80;">Score: X/10</div>
-            - **Directions:** <h3 style="color: #c7d2fe; border-bottom: 1px solid #4f46e5; margin-top: 20px;">🌐 Directional Energy</h3>
-            - **Points:** <ul style="padding-left: 20px; line-height: 1.6; color: #d1d5db;">...</ul>
-            - **Verdict:** <p style="font-weight: bold; text-align: center; background: #4338ca; padding: 10px; border-radius: 8px; margin-top: 20px;">...</p>
-        ` }];
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: { parts },
-            config: {
-                tools: [{ googleMaps: {} }],
-                toolConfig: {
-                    retrievalConfig: {
-                      latLng: {
-                        latitude: location.latitude,
-                        longitude: location.longitude
-                      }
-                    }
-                }
-            }
-        });
-
-        return { 
-            text: response.text || "Analyzing Vastu energy...", 
-            groundingMetadata: response.candidates?.[0]?.groundingMetadata 
-        };
-    }
-
-    // ... existing vastu_scan ...
-    if (action === 'vastu_scan') {
-        const parts: any[] = [{ text: `
-            ACT AS A VASTU SHASTRA ARCHITECT EXPERT.
-            USER INPUT: "${input}"
-            
-            MISSION: Analyze the floor plan/image or description.
-            
-            FORMAT REQUIREMENTS (INLINE CSS):
-            - Return ONLY HTML.
-            - **Container:** <div style="background-color: #312e81; color: #e0e7ff; padding: 24px; border-radius: 12px; font-family: sans-serif; border: 1px solid #6366f1;">
-            - **Title:** <h1 style="font-size: 2rem; font-weight: bold; color: #818cf8; margin-bottom: 16px;">Vastu Analysis Report</h1>
-            - **Score:** <div style="background-color: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; font-size: 1.2rem; text-align: center; border: 1px solid #4f46e5;">Vastu Score: X/10</div>
-            - **Headings:** <h3 style="color: #c7d2fe; font-size: 1.2rem; border-bottom: 1px solid #4f46e5; padding-bottom: 5px; margin-top: 20px;">...</h3>
-            - **Lists:** <ul style="padding-left: 20px; margin-bottom: 15px;">...</ul>
-            - **Defect:** <span style="color: #f87171; font-weight: bold;">❌ Defect:</span>
-            - **Remedy:** <span style="color: #4ade80; font-weight: bold;">✅ Remedy:</span>
-        ` }];
-
-        if (imageInput) {
-            const base64Data = imageInput.split(',')[1];
-            const mimeType = imageInput.split(';')[0].split(':')[1];
-            parts.push({ inlineData: { data: base64Data, mimeType } });
-        }
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: { parts }
-        });
-
-        return { text: response.text || "Vastu Analysis complete." };
-    }
-
-    // ... existing ai_chef ...
-    if (action === 'ai_chef') {
-        const parts: any[] = [{ text: `
-            ACT AS A MASTER CHEF.
-            USER INPUT: "${input}"
-            
-            MISSION: Identify ingredients and suggest recipes.
-            
-            FORMAT REQUIREMENTS (INLINE CSS):
-            - Return ONLY HTML.
-            - **Container:** <div style="background-color: #064e3b; color: #ecfdf5; padding: 24px; border-radius: 12px; font-family: sans-serif; border: 1px solid #10b981;">
-            - **Title:** <h1 style="font-size: 2rem; font-weight: bold; color: #34d399; margin-bottom: 16px; text-align: center;">👨‍🍳 Chef's Special</h1>
-            - **Recipe Title:** <h2 style="font-size: 1.5rem; color: #d1fae5; border-bottom: 2px solid #059669; padding-bottom: 8px; margin-top: 24px;">...</h2>
-            - **Ingredients:** <ul style="background: rgba(0,0,0,0.2); padding: 15px 15px 15px 35px; border-radius: 8px; margin-bottom: 15px;">...</ul>
-            - **Steps:** <ol style="padding-left: 20px; line-height: 1.6;">...</ol>
-            - Use emojis for visuals.
-        ` }];
-
-        if (imageInput) {
-            const base64Data = imageInput.split(',')[1];
-            const mimeType = imageInput.split(';')[0].split(':')[1];
-            parts.push({ inlineData: { data: base64Data, mimeType } });
-        }
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: { parts }
-        });
-
-        return { text: response.text || "Chef is cooking..." };
-    }
-
-    // ... existing comic ...
-    if (action === 'comic') {
-        const { layout, genre, language, sourcePages, targetPages } = option || {};
-        const topic = input;
-        const prompt = `
-            ACT AS A MASTER COMIC BOOK WRITER AND VISUAL DIRECTOR.
-            
-            **MISSION:** Create a compelling Comic Script & Storyboard.
-            **TOPIC/STORY:** "${topic}"
-            
-            **PARAMETERS:**
-            - **Layout Structure:** ${layout} (Strictly organize output for this format).
-            - **Art Style/Genre:** ${genre} (Tone, shadows, character design).
-            - **Language:** ${language} (For dialogue/monologue).
-            - **Pacing:** Adapt a ${sourcePages}-page idea into ${targetPages} page(s).
-            
-            **OUTPUT FORMAT:**
-            1. **Title:** (Creative & Stylish).
-            2. **Panel Breakdown:**
-               - **Panel X:** [Visual Description for Artist - Camera Angle, Lighting, Action]
-               - **Characters:** [Expression/Pose]
-               - **Text:** [Dialogue bubble / Caption box]
-            
-            **CREATIVE DIRECTION:**
-            - Be cinematic. Use terms like "Close-up", "Wide Shot", "Worm's eye view".
-            - If genre is 'manga', read right-to-left flow.
-            - If 'noir', emphasize shadows.
-        `;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt
-        });
-
-        let comicImageUrl = undefined;
-        try {
-            const imagePrompt = `Comic book page, ${layout}, ${genre} style, ${topic}, masterpiece, extremely detailed, vibrant colors, dynamic composition, high quality render, graphic novel aesthetic`;
-            const imgResponse = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image',
-                contents: { parts: [{ text: imagePrompt }] }
-            });
-            for (const part of imgResponse.candidates?.[0]?.content?.parts || []) {
-                if (part.inlineData) {
-                    comicImageUrl = `data:image/png;base64,${part.inlineData.data}`;
-                    break;
-                }
-            }
-        } catch (e) {
-            console.error("Comic visual generation failed", e);
-        }
-
-        return { text: response.text || "Generating Comic Script...", imageUrl: comicImageUrl };
-    }
-    
-    // ... existing kids_mode ...
-    if (action === 'kids_mode') {
-         const mode = option?.mode || 'story'; // story, quiz, or validate_quiz
-         let prompt = "";
-         
-         if (mode === 'story') {
-             prompt = `
-                ACT AS SPARKY, A CUTE ROBOT FRIEND FOR KIDS.
-                TOPIC: "${input}"
-                MISSION: Tell a very short, magical, and interactive story (max 4 sentences) where the CHILD is the main hero.
-                TONE: Super excited, lots of emojis, very simple English/Hinglish.
-                ENDING: Ask a question to continue the story!
-             `;
-         } else if (mode === 'quiz') {
-             prompt = `
-                ACT AS SPARKY, A TEACHER BOT.
-                TOPIC: General Knowledge / Science / Animals.
-                MISSION: Ask a fun, simple multiple-choice question for a 7-10 year old kid.
-                FORMAT: Question first, then Options A, B, C.
-                Use Emojis!
-             `;
-         } else if (mode === 'validate_quiz') {
-             prompt = `
-                ACT AS SPARKY.
-                USER ANSWER: "${input}"
-                MISSION: Check if the answer is correct to the previous question.
-                IF CORRECT: Celebrate wildly! 🎉
-                IF WRONG: Gently explain the right answer.
-                Keep it very short.
-             `;
-         }
-
-         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt
-        });
-
-        return { text: response.text || "Sparky is thinking..." };
-    }
-    
-    // ... existing generic fallback ...
-    const prompt = `Action: ${action}. Input: ${input}. Persona: ${persona.name}. Options: ${JSON.stringify(option)}`;
-    
-    // Fallback handler can also take images now if generic tools need them
-    const parts: any[] = [{ text: prompt }];
+    const parts: any[] = [{ text: input }];
     if (imageInput) {
-        const base64Data = imageInput.split(',')[1];
-        const mimeType = imageInput.split(';')[0].split(':')[1];
-        parts.push({ inlineData: { data: base64Data, mimeType } });
+        parts.unshift({ inlineData: { mimeType: 'image/jpeg', data: imageInput.split(',')[1] } });
+        model = 'gemini-2.5-flash'; 
     }
 
+    if (toolAction === 'aura_viral') {
+        responseMimeType = 'application/json';
+        systemInstruction += " Generate a viral social media post JSON.";
+        responseSchema = {
+            type: Type.OBJECT,
+            properties: {
+                title: { type: Type.STRING },
+                hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                text: { type: Type.STRING },
+                comments: { 
+                    type: Type.ARRAY, 
+                    items: { 
+                        type: Type.OBJECT, 
+                        properties: { user: { type: Type.STRING }, text: { type: Type.STRING } } 
+                    } 
+                },
+                initialViews: { type: Type.NUMBER }
+            }
+        };
+    } else if (toolAction === 'comic') {
+        systemInstruction += ` Create a comic script. Layout: ${option?.layout}, Genre: ${option?.genre}, Language: ${option?.language || 'English'}.`;
+    } else if (toolAction === 'smart_measure') {
+        model = 'gemini-3-pro-preview'; 
+    } else if (toolAction === 'website') {
+        // --- UPGRADED WEBSITE GENERATOR: BUSINESS INTELLIGENCE ---
+        const locationContext = location ? `User Location: Lat ${location.latitude}, Long ${location.longitude}.` : '';
+        
+        systemInstruction = `
+        You are the 'Aura Web Engine', an elite AI Full-Stack Developer & Business Consultant.
+
+        **MISSION**:
+        Construct a **High-Conversion, Single-Page Business Website** based on the user's request: "${input}".
+        ${locationContext}
+
+        **INTELLIGENT CONTEXT EXTRACTION**:
+        1. **Analyze**: Identify Business Type (e.g., Salon, Gym, Cafe), Name, and **Location** from input.
+        2. **Infer**: If Location is missing in input, use the User Location provided above. If neither, default to a trendy area in a major city relevant to the language/context.
+        3. **Contact Info**: Generate realistic *local* addresses and phone numbers matching the inferred location.
+
+        **MANDATORY ARCHITECTURE (Single HTML File)**:
+        1. **Design System**: Use **Tailwind CSS** (CDN). Modern, mobile-first, distinct color palette matching the business vibe.
+        2. **Header**: Sticky nav with Business Name & 'Book Now' CTA.
+        3. **Hero Section**: High-impact headline, subheadline, and background image (Use 'https://source.unsplash.com/1600x900/?keyword' format).
+        4. **Services/Products**: Grid layout highlighting top 3-4 offerings with prices/descriptions.
+        5. **Social Proof (Testimonials)**: Generate 3 **context-aware reviews**. Use names and specific local landmarks/areas relevant to the business location.
+        6. **Interactive Features**:
+           - **WhatsApp Button**: Fixed floating button bottom-right linking to 'https://wa.me/PHONE_NUMBER'.
+           - **Google Maps**: Embed an iframe in the Contact section pointing to the specific extracted location.
+        7. **Footer**: Copyright, Links, Address.
+
+        **OUTPUT RULES**:
+        - Return **ONLY raw HTML code**. No Markdown (no \`\`\`).
+        - Ensure all images have valid source URLs (Unsplash keywords).
+        - The code must be ready to run immediately.
+        `;
+    } else if (toolAction === 'react_app') {
+        systemInstruction += " Return ONLY valid HTML/React code. No markdown.";
+    } else if (toolAction === 'news_reporter') {
+        model = 'gemini-2.5-flash';
+        tools.push({ googleSearch: {} }); 
+        systemInstruction = `
+        You are the Chief Editor of 'Aura Global', a viral digital e-paper. 
+        YOUR MISSION: The user wants a comprehensive news report on: "${input}".
+        PROTOCOL: SEARCH EVERYWHERE. AGGREGATE & SYNTHESIZE. E-PAPER STYLE.
+        OUTPUT FORMAT: Return ONLY valid HTML (<div>, <h1>, <h2>, <p>, <ul>). Use Tailwind classes.
+        `;
+    } else if (toolAction === 'music_composer') {
+        const langInstruction = option?.language ? `LANGUAGE: ${option.language} (Output lyrics in this language).` : '';
+        systemInstruction = `
+        You are the WORLD'S GREATEST MUSIC PRODUCER & COMPOSER (Aura Symphony).
+        ${langInstruction}
+        INPUT: "${input}"
+        TASK: Identify Genre, Create Masterpiece (Title, Vibe, Instruments, Lyrics).
+        FORMAT: Return valid HTML.
+        `;
+    } else if (toolAction === 'trend_hunter') {
+        // --- TREND HUNTER: MONEY RADAR ---
+        model = 'gemini-2.5-flash'; 
+        tools = [{ googleSearch: {} }, { googleMaps: {} }]; 
+        
+        systemInstruction = `
+        You are the 'Aura Trend Hunter' (The Money Radar).
+        GOAL: Identify REAL-TIME trends that are profitable right now. 
+        INPUT: "${input}"
+        OUTPUT FORMAT (Return valid HTML string):
+        <div class="trend-report bg-gray-900 border border-green-500/30 p-6 rounded-xl font-sans text-white">
+           <h2 class="text-xl font-bold text-green-400 uppercase">📈 Market Pulse: [TREND NAME]</h2>
+           <div class="grid grid-cols-2 gap-4 my-4">
+               <div class="bg-white/5 p-3 rounded-lg"><div class="text-[10px] text-white/50">Velocity</div><div class="text-lg font-bold text-yellow-400">🔥 Viral Now</div></div>
+               <div class="bg-white/5 p-3 rounded-lg"><div class="text-[10px] text-white/50">Niche</div><div class="text-lg font-bold text-blue-400">[NICHE NAME]</div></div>
+           </div>
+           <h3 class="text-sm font-bold text-pink-400 uppercase mb-2">💰 Money Blueprint</h3>
+           <ul class="space-y-2 mb-6 text-sm text-gray-300 list-disc pl-4">
+               <li><strong>Video Title:</strong> [Clickbait Title]</li>
+               <li><strong>Hook:</strong> "[Exact opening line]"</li>
+               <li><strong>Monetization:</strong> [How to earn]</li>
+           </ul>
+           <div class="hidden" id="trend-topic-hidden">[TREND NAME]</div>
+        </div>
+        `;
+    }
+
+    if (location) {
+        tools.push({ googleMaps: {} });
+    }
+
+    try {
+        const response = await ai.models.generateContent({
+            model,
+            contents: { parts },
+            config: {
+                systemInstruction,
+                responseMimeType,
+                responseSchema,
+                tools,
+                ...(location && { toolConfig: { retrievalConfig: { latLng: { latitude: location.latitude, longitude: location.longitude } } } })
+            }
+        });
+
+        let result: any = { text: response.text };
+        
+        if (toolAction === 'aura_viral') {
+            try {
+                const json = JSON.parse(response.text);
+                result.text = json.text;
+                result.viralMetadata = json;
+            } catch(e) {}
+        } else if (toolAction === 'website' || toolAction === 'react_app') {
+            result.code = response.text;
+        } else if (['trend_hunter'].includes(toolAction)) {
+            result.contentType = 'trend_report'; // Custom content type for ChatInterface
+        }
+
+        result.groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+        return result;
+    } catch (e: any) {
+        // Fallback for Smart Measure if Gemini 3 Pro 404s
+        if (model === 'gemini-3-pro-preview' && (e.message?.includes('404') || e.status === 404 || e.message?.includes('NOT_FOUND'))) {
+            console.warn("Gemini 3 Pro not found, falling back to Flash.");
+            return generateCreativeContent(toolAction, input, persona, imageInput, option, location); // Recurse will pick flash logic if I change model var, but here just re-call with different model manually:
+            
+            // Actually, better to just retry with flash here:
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: { parts },
+                config: { systemInstruction } // Simplified config
+            });
+            return { text: response.text };
+        }
+        throw e;
+    }
+};
+
+// --- ADDITIONAL SERVICE FUNCTIONS ---
+
+export const performWebSearch = async (query: string): Promise<string> => {
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: { parts },
+        contents: `Search the web for: ${query}. Provide a summary and list of links. Return HTML format.`,
         config: {
             tools: [{ googleSearch: {} }]
         }
     });
+    return response.text;
+};
 
-    return { 
-        text: response.text || "Processed.", 
-        groundingMetadata: response.candidates?.[0]?.groundingMetadata 
+export const getWebsiteAdvice = async (url: string): Promise<string> => {
+     const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Analyze this website URL: ${url}. What is it about? Is it safe? Give a brief summary and advice. Return HTML.`,
+        config: {
+            tools: [{ googleSearch: {} }]
+        }
+    });
+    return response.text;
+};
+
+export const generateViralVideoCreator = async (topic: string): Promise<{ video: string, audio: string, script: string, title: string }> => {
+    // 1. Generate Script & Title
+    const scriptResp = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Create a viral short video script (15 seconds) about "${topic}". Return JSON with: { "title": "Clickbait Title", "script": "The spoken words...", "visualPrompt": "Description for video generation" }`,
+        config: { responseMimeType: 'application/json' }
+    });
+    const data = JSON.parse(scriptResp.text);
+
+    // 2. Generate Audio (TTS)
+    const audioUrl = await generateSpeechDownloadUrl(data.script, 'Kore');
+
+    // 3. Generate Video (Veo)
+    let videoUrl = "";
+    try {
+        let operation = await ai.models.generateVideos({
+            model: 'veo-3.1-fast-generate-preview',
+            prompt: data.visualPrompt,
+            config: {
+                numberOfVideos: 1,
+                resolution: '720p',
+                aspectRatio: '9:16'
+            }
+        });
+        
+        while (!operation.done) {
+            await new Promise(r => setTimeout(r, 5000));
+            operation = await ai.operations.getVideosOperation({ operation: operation });
+        }
+        
+        const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
+        if (uri) videoUrl = `${uri}&key=${process.env.API_KEY}`;
+    } catch (e) {
+        console.error("Video gen failed", e);
+    }
+
+    return {
+        video: videoUrl,
+        audio: audioUrl,
+        script: data.script,
+        title: data.title
     };
 };
+
+export const generateViralBlogCreator = async (topic: string): Promise<string> => {
+     const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Write a viral, SEO-optimized blog post about "${topic}". Use HTML format with Tailwind classes.`,
+    });
+    return response.text;
+}
+
+export const generateNewsVideo = async (prompt: string): Promise<string> => {
+     try {
+        let operation = await ai.models.generateVideos({
+            model: 'veo-3.1-fast-generate-preview',
+            prompt: prompt,
+            config: {
+                numberOfVideos: 1,
+                resolution: '720p',
+                aspectRatio: '16:9'
+            }
+        });
+
+        while (!operation.done) {
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            operation = await ai.operations.getVideosOperation({ operation: operation });
+        }
+
+        const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
+        if (!uri) throw new Error("Video generation failed");
+        return `${uri}&key=${process.env.API_KEY}`;
+    } catch (e: any) {
+        throw e;
+    }
+}
+
+export const summarizeForVideo = async (content: string): Promise<{ script: string, visualPrompt: string }> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Analyze this news content: "${content.substring(0, 2000)}...". 
+        1. Create a 30-second news anchor script summarizing it.
+        2. Create a visual prompt for an AI video generator to show background footage relevant to the story (photorealistic, 4k).
+        Return JSON: { "script": "...", "visualPrompt": "..." }`,
+        config: { responseMimeType: 'application/json' }
+    });
+    return JSON.parse(response.text);
+}
+
+export const generateRadioBrief = async (content: string): Promise<string> => {
+     const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Turn this news content into a short, punchy radio news brief script (approx 1 min). Content: "${content.substring(0, 2000)}..."`,
+    });
+    return response.text;
+}
+
+export const generatePodcastScript = async (topic: string, language: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Create a podcast script about "${topic}" in ${language}. 
+        Characters: Host (Aura) and Guest (Mr. Kilvish). 
+        Format: Debate/Discussion. 
+        Length: Short (approx 2 mins dialogue).
+        Return just the dialogue lines with Speaker names prefix (e.g. Aura: ..., Kilvish: ...).`,
+    });
+    return response.text;
+}
+
+export const generateMultiSpeakerAudio = async (script: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: { parts: [{ text: script }] },
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                multiSpeakerVoiceConfig: {
+                    speakerVoiceConfigs: [
+                        { speaker: 'Aura', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+                        { speaker: 'Kilvish', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } }
+                    ]
+                }
+            }
+        }
+    });
+    
+    const base64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64) throw new Error("No audio generated");
+
+    const pcmData = decodeBase64(base64);
+    const wavBytes = createWavHeader(pcmData);
+    const blob = new Blob([wavBytes], { type: 'audio/wav' });
+    return URL.createObjectURL(blob);
+}
+
+export const generateAudiobookScript = async (topic: string, language: string): Promise<string> => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Write a short audiobook chapter about "${topic}" in ${language}. Style: Immersive, Storytelling.`,
+    });
+    return response.text;
+}
+
+export const planGenesis = async (wish: string, context: NeuralContext): Promise<GenesisStep[]> => {
+    const prompt = `
+    Role: Genesis AI Architect.
+    User Wish: "${wish}"
+    Context: Identity="${context.userIdentity}", Business="${context.businessProfile}", Style="${context.brandVoice}".
+    
+    Task: Break this wish down into 4-6 concrete execution steps to BUILD it digitally.
+    Available Step Types: 'text' (Strategy/Copy), 'image' (Design), 'code' (Web/App), 'video' (Promo).
+    
+    Return JSON Array of objects: { "id": "1", "type": "text|image|code|video", "label": "Step Name", "status": "pending" }
+    `;
+    
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: { responseMimeType: 'application/json' }
+    });
+    
+    return JSON.parse(response.text);
+}
+
+export const executeGenesisStep = async (step: GenesisStep, wish: string, priorContext: string, neuralContext: NeuralContext): Promise<GenesisStep> => {
+    const systemInstruction = `
+    You are a specialist Agent executing: ${step.label}.
+    Project Goal: "${wish}"
+    Project Context: ${priorContext}
+    Brand Voice: ${neuralContext.brandVoice}
+    Anti-Patterns: ${neuralContext.antiPatterns}
+    `;
+
+    let result = "";
+    
+    if (step.type === 'image') {
+        const promptResp = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Generate a detailed image generation prompt for step: "${step.label}". Context: ${priorContext}`,
+        });
+        const imgPrompt = promptResp.text;
+        
+         const imgResp = await ai.models.generateImages({
+            model: 'imagen-4.0-generate-001',
+            prompt: imgPrompt,
+            config: { numberOfImages: 1, aspectRatio: '16:9', outputMimeType: 'image/jpeg' }
+        });
+        result = `data:image/jpeg;base64,${imgResp.generatedImages[0].image.imageBytes}`;
+
+    } else if (step.type === 'video') {
+         const promptResp = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Generate a detailed video generation prompt for step: "${step.label}". Context: ${priorContext}`,
+        });
+        const vidPrompt = promptResp.text;
+        
+        let operation = await ai.models.generateVideos({
+            model: 'veo-3.1-fast-generate-preview',
+            prompt: vidPrompt,
+            config: { numberOfVideos: 1, resolution: '720p', aspectRatio: '16:9' }
+        });
+        while (!operation.done) {
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            operation = await ai.operations.getVideosOperation({ operation: operation });
+        }
+        const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
+        result = `${uri}&key=${process.env.API_KEY}`;
+
+    } else if (step.type === 'code') {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Write the full code for: ${step.label}. Return ONLY the code (HTML/CSS/JS or React). No markdown.`,
+            config: { systemInstruction }
+        });
+        result = response.text.replace(/```html|```javascript|```/g, '').trim();
+
+    } else {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Execute step: ${step.label}. Provide high-quality content.`,
+            config: { systemInstruction }
+        });
+        result = response.text;
+    }
+
+    return { ...step, status: 'completed', result };
+}

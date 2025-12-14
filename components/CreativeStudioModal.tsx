@@ -18,10 +18,10 @@ export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     
-    // Comic Options
+    // Content Options
     const [comicLayout, setComicLayout] = useState<ComicLayout>('1-panel');
     const [comicGenre, setComicGenre] = useState<ComicGenre>('superhero');
-    const [comicLanguage, setComicLanguage] = useState<ComicLanguage>('english');
+    const [language, setLanguage] = useState<string>('English'); // Shared language state
 
     if (!isOpen) return null;
 
@@ -41,12 +41,12 @@ export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen
     const handleSubmit = () => {
         if (!selectedTool) return;
         
-        let options: any = undefined;
+        let options: any = { language: language }; // Default inject language
         if (selectedTool.action === 'comic') {
             options = {
+                ...options,
                 layout: comicLayout,
                 genre: comicGenre,
-                language: comicLanguage,
                 sourcePages: 1,
                 targetPages: 1
             };
@@ -59,8 +59,13 @@ export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen
         setSelectedTool(null);
     };
 
-    const needsImage = ['vastu_scan', 'vision_scan', 'ai_chef', 'edit_image', 'smart_measure'].includes(selectedTool?.action || '');
+    // LOGIC UPDATE: Distinguish between tools that REQUIRE an image vs SUPPORT an image
+    const requiresImage = ['vastu_scan', 'vision_scan', 'ai_chef', 'edit_image', 'smart_measure'].includes(selectedTool?.action || '');
+    const supportsImage = ['comic'].includes(selectedTool?.action || ''); 
+    const showImageUpload = requiresImage || supportsImage;
+
     const isLiveCapable = selectedTool?.action === 'smart_measure';
+    const showLanguageSelector = ['comic', 'standup_comedy', 'music_composer'].includes(selectedTool?.action || '');
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
@@ -144,17 +149,19 @@ export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen
                                         onChange={(e) => setInput(e.target.value)}
                                         className="w-full h-32 bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:border-pink-500 transition-colors"
                                         placeholder={
-                                            selectedTool.action === 'live_vastu' 
-                                            ? "E.g., I am facing North, the entrance is behind me..." 
-                                            : needsImage ? `Describe what you want to analyze...` : `Enter details for ${selectedTool.label}...`
+                                            selectedTool.action === 'live_vastu' ? "E.g., I am facing North, the entrance is behind me..." :
+                                            selectedTool.action === 'trend_hunter' ? "E.g., Tech trends in India, Viral food spots in Mumbai, or just 'Find Money'..." :
+                                            showImageUpload ? `Describe what you want to analyze or create...` : `Enter details for ${selectedTool.label}...`
                                         }
                                     />
                                 </div>
 
                                 {/* IMAGE UPLOAD FOR SUPPORTED TOOLS */}
-                                {needsImage && (
+                                {showImageUpload && (
                                     <div>
-                                        <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Upload Image (Required)</label>
+                                        <label className="block text-xs font-bold text-white/50 mb-2 uppercase">
+                                            Upload Image {requiresImage ? '(Required)' : '(Optional)'}
+                                        </label>
                                         <div 
                                             onClick={() => fileInputRef.current?.click()}
                                             className={`w-full h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all ${selectedImage ? 'border-green-500 bg-green-900/10' : 'border-white/10 hover:border-white/30 bg-black/20'}`}
@@ -181,63 +188,70 @@ export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen
                                     </div>
                                 )}
 
-                                {/* COMIC OPTIONS */}
-                                {selectedTool.action === 'comic' && (
-                                    <div className="grid grid-cols-3 gap-4 p-4 bg-white/5 rounded-xl">
-                                         {/* Layout Selection */}
-                                         <div>
-                                             <label className="text-[10px] font-bold text-yellow-500/80 mb-2 block uppercase tracking-wider">Comic Layout</label>
-                                             <select
-                                                value={comicLayout}
-                                                onChange={(e) => setComicLayout(e.target.value as ComicLayout)}
-                                                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none"
-                                             >
-                                                 <option value="1-panel">Single Splash</option>
-                                                 <option value="3-panel-strip">3-Panel Strip</option>
-                                                 <option value="4-panel-grid">4-Panel Grid</option>
-                                                 <option value="manga-page">Manga Page</option>
-                                             </select>
-                                         </div>
-
-                                         {/* Genre Selection */}
-                                         <div>
-                                             <label className="text-[10px] font-bold text-cyan-500/80 mb-2 block uppercase tracking-wider">Genre</label>
-                                             <select
-                                                value={comicGenre}
-                                                onChange={(e) => setComicGenre(e.target.value as ComicGenre)}
-                                                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none"
-                                             >
-                                                 <option value="superhero">Superhero</option>
-                                                 <option value="manga">Manga</option>
-                                                 <option value="noir">Noir</option>
-                                                 <option value="retro">Retro</option>
-                                                 <option value="cyberpunk">Cyberpunk</option>
-                                                 <option value="fantasy">Fantasy</option>
-                                                 <option value="comedy">Comedy</option>
-                                             </select>
-                                         </div>
-
+                                {/* OPTIONS GRID */}
+                                {(selectedTool.action === 'comic' || showLanguageSelector) && (
+                                    <div className="grid grid-cols-2 gap-4 p-4 bg-white/5 rounded-xl">
                                          {/* Language Selection */}
-                                         <div>
-                                             <label className="text-[10px] font-bold text-green-500/80 mb-2 block uppercase tracking-wider">Language</label>
-                                             <select
-                                                value={comicLanguage}
-                                                onChange={(e) => setComicLanguage(e.target.value as ComicLanguage)}
-                                                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none"
-                                             >
-                                                 <option value="english">English</option>
-                                                 <option value="hindi">Hindi</option>
-                                                 <option value="hinglish">Hinglish</option>
-                                                 <option value="japanese">Japanese</option>
-                                                 <option value="spanish">Spanish</option>
-                                             </select>
-                                         </div>
+                                         {showLanguageSelector && (
+                                             <div className="col-span-2">
+                                                 <label className="text-[10px] font-bold text-green-500/80 mb-2 block uppercase tracking-wider">Content Language</label>
+                                                 <select
+                                                    value={language}
+                                                    onChange={(e) => setLanguage(e.target.value)}
+                                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none"
+                                                 >
+                                                     <option value="English">English</option>
+                                                     <option value="Hindi">Hindi</option>
+                                                     <option value="Hinglish">Hinglish</option>
+                                                     <option value="Spanish">Spanish</option>
+                                                     <option value="French">French</option>
+                                                     <option value="German">German</option>
+                                                     <option value="Japanese">Japanese</option>
+                                                 </select>
+                                             </div>
+                                         )}
+
+                                         {/* Comic Specific Options */}
+                                         {selectedTool.action === 'comic' && (
+                                             <>
+                                                 <div>
+                                                     <label className="text-[10px] font-bold text-yellow-500/80 mb-2 block uppercase tracking-wider">Comic Layout</label>
+                                                     <select
+                                                        value={comicLayout}
+                                                        onChange={(e) => setComicLayout(e.target.value as ComicLayout)}
+                                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none"
+                                                     >
+                                                         <option value="1-panel">Single Splash</option>
+                                                         <option value="3-panel-strip">3-Panel Strip</option>
+                                                         <option value="4-panel-grid">4-Panel Grid</option>
+                                                         <option value="manga-page">Manga Page</option>
+                                                     </select>
+                                                 </div>
+
+                                                 <div>
+                                                     <label className="text-[10px] font-bold text-cyan-500/80 mb-2 block uppercase tracking-wider">Genre</label>
+                                                     <select
+                                                        value={comicGenre}
+                                                        onChange={(e) => setComicGenre(e.target.value as ComicGenre)}
+                                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none"
+                                                     >
+                                                         <option value="superhero">Superhero</option>
+                                                         <option value="manga">Manga</option>
+                                                         <option value="noir">Noir</option>
+                                                         <option value="retro">Retro</option>
+                                                         <option value="cyberpunk">Cyberpunk</option>
+                                                         <option value="fantasy">Fantasy</option>
+                                                         <option value="comedy">Comedy</option>
+                                                     </select>
+                                                 </div>
+                                             </>
+                                         )}
                                     </div>
                                 )}
 
                                 <button
                                     onClick={handleSubmit}
-                                    disabled={(needsImage && !selectedImage) || isProcessing}
+                                    disabled={(requiresImage && !selectedImage) || isProcessing}
                                     className="w-full py-4 bg-gradient-to-r from-pink-600 to-purple-600 rounded-xl text-white font-bold text-sm shadow-lg hover:shadow-pink-500/20 transition-all disabled:opacity-50"
                                 >
                                     {isProcessing ? 'Generating...' : `Run ${selectedTool.label}`}

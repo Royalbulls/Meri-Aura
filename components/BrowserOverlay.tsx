@@ -30,6 +30,8 @@ export const BrowserOverlay: React.FC<BrowserOverlayProps> = ({ isOpen, initialU
         const handleClick = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
             const link = target.closest('a');
+            
+            // Only capture clicks on links inside the container
             if (link && containerRef.current?.contains(link)) {
                 e.preventDefault();
                 const href = link.getAttribute('href');
@@ -49,6 +51,7 @@ export const BrowserOverlay: React.FC<BrowserOverlayProps> = ({ isOpen, initialU
     }, [searchResultsHtml, searchMode]);
 
     const handleNavigate = async (targetUrl: string) => {
+        // Basic heuristic to detect if input is a URL or Search Query
         const isSearchQuery = !targetUrl.includes('.') || targetUrl.includes('google.com/search');
         
         if (isSearchQuery) {
@@ -68,7 +71,9 @@ export const BrowserOverlay: React.FC<BrowserOverlayProps> = ({ isOpen, initialU
             
             try {
                 const results = await performWebSearch(query);
-                setSearchResultsHtml(results);
+                // Strip Markdown formatting if Gemini adds it
+                const cleanResults = results.replace(/```html/g, '').replace(/```/g, '');
+                setSearchResultsHtml(cleanResults);
             } catch(e) {
                 setSearchResultsHtml("<p style='padding:20px; color:white;'>Search failed. Try again.</p>");
             } finally {
@@ -188,7 +193,7 @@ export const BrowserOverlay: React.FC<BrowserOverlayProps> = ({ isOpen, initialU
                         )}
                         
                         {/* Fallback Overlay for known blockers */}
-                        {['google.com', 'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com'].some(d => url.includes(d)) && !iframeError && (
+                        {['google.com', 'youtube.com', 'facebook.com', 'twitter.com', 'instagram.com', 'linkedin.com'].some(d => url.includes(d)) && !iframeError && (
                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/95 text-white text-center p-6 backdrop-blur-sm z-10">
                                  <span className="text-4xl mb-4">🔒</span>
                                  <h3 className="text-xl font-bold mb-2">Security Restriction</h3>
