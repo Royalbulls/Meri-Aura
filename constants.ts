@@ -59,6 +59,9 @@ export const DEFAULT_PERSONAS: Persona[] = [
 ];
 
 export const CREATIVE_TOOLS: StudioTool[] = [
+    { id: 'navigator', label: 'Travel Navigator', icon: '🧭', description: 'Get directions, find places, and explore the world.', category: 'utility', action: 'navigator' },
+    { id: 'anatomy_scan', label: 'Deep Structure Scan', icon: '🧬', description: 'Upload any photo (Insect, Machine, Animal). See inside it, understand how it works.', category: 'utility', action: 'anatomy_scan' },
+    { id: 'invoice_editor', label: 'Invoice Maker', icon: '🧾', description: 'Create from scratch or Upload photo to edit. Auto-calculates totals.', category: 'utility', action: 'invoice_editor' },
     { id: 'trend_hunter', label: 'Trend Hunter (Money Radar)', icon: '📈', description: 'Detect Real-Time Viral Trends on Google/YouTube & Generate Money Plan.', category: 'utility', action: 'trend_hunter' },
     { id: 'aura_podcast', label: 'Aura Podcast / Audio Book', icon: '🎙️', description: 'Generate Aura vs Mr. Kilvish Debates.', category: 'creative', action: 'aura_podcast' },
     { id: 'music_composer', label: 'Universal Music Composer', icon: '🎼', description: 'Create Songs, Ghazals, Raps, or Bhajans.', category: 'creative', action: 'music_composer' },

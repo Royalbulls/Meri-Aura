@@ -8,6 +8,7 @@ interface AvatarDisplayProps {
   isThinking: boolean; // Processing state for "Thinking" aura
   onAnimateRequest?: () => void; // Direct trigger to animate
   isUserTyping?: boolean; // New: React to user typing
+  isListening?: boolean; // New: React to microphone listening
   layout?: AvatarLayout; // New: User controlled position/scale
   onDownloadVideo?: () => void; // New: Direct download trigger
   onDownloadImage?: () => void; // New: Direct image download trigger
@@ -19,6 +20,7 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
     isThinking, 
     onAnimateRequest, 
     isUserTyping,
+    isListening, // Use this for "Sunne Ki Shakti" visualization
     layout = { scale: 1.0, x: 0, y: 0 },
     onDownloadVideo,
     onDownloadImage
@@ -48,18 +50,27 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
 
   // --- AURA STYLES (Simpler & Faster) ---
   const getAuraStyle = () => {
-    if (avatarState.isLoading) {
+    if (isListening) {
+        // ACTIVE LISTENING: Green Ripples (Talking Tom "Ear" effect)
+        return {
+            background: `radial-gradient(circle at center, rgba(34, 197, 94, 0.4) 0%, rgba(17, 24, 39, 1) 70%)`,
+            opacity: 0.9,
+            animation: 'listeningRipple 1.5s infinite ease-out'
+        };
+    } else if (avatarState.isLoading) {
         return {
             background: `radial-gradient(circle at center, rgba(236, 72, 153, 0.4) 0%, rgba(17, 24, 39, 1) 70%)`,
             opacity: 1,
             animation: 'pulseFast 1s infinite ease-in-out'
         };
     } else if (avatarState.isTalking || isTalking) {
+        // TALKING: Pink/Purple Energy
         return {
             background: `radial-gradient(circle at center, rgba(236, 72, 153, 0.5) 0%, rgba(17, 24, 39, 1) 70%)`,
-            opacity: 0.8
+            opacity: 0.8 + (normalizedLevel * 0.2) // Dynamic opacity based on volume
         };
     } else if (isThinking) {
+        // THINKING: Deep Purple Pulse
         return {
             background: `radial-gradient(circle at center, rgba(168, 85, 247, 0.4) 0%, rgba(17, 24, 39, 1) 70%)`,
             opacity: 0.9,
@@ -73,6 +84,7 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
             animation: 'neonPulse 2s infinite ease-in-out'
         };
     } else {
+        // IDLE: Calm Blue
         return {
             background: `radial-gradient(circle at center, rgba(79, 70, 229, 0.15) 0%, rgba(17, 24, 39, 1) 70%)`,
             opacity: 0.5
@@ -87,7 +99,7 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
         
         {/* Background Aura (Static/Simple Pulse) */}
         <div 
-          className="absolute inset-0 z-0 transition-opacity duration-500 ease-out"
+          className="absolute inset-0 z-0 transition-all duration-500 ease-out"
           style={auraStyle}
         ></div>
 
@@ -136,7 +148,7 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
                     autoPlay
                     className={`
                         w-full h-full object-contain object-bottom filter drop-shadow-2xl transition-transform duration-500
-                        ${isUserTyping ? 'scale-105 brightness-110' : 'scale-100'} 
+                        ${isUserTyping || isListening ? 'scale-105 brightness-110' : 'scale-100'} 
                     `}
                  />
               ) : avatarState.imageUrl ? (
@@ -150,7 +162,11 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
                     `}
                     style={{
                         transformOrigin: 'bottom center',
-                        filter: isUserTyping ? 'brightness(1.15) drop-shadow(0 0 15px rgba(6,182,212,0.3))' : 'none'
+                        filter: isListening 
+                            ? 'brightness(1.1) drop-shadow(0 0 20px rgba(34,197,94,0.4))' 
+                            : isUserTyping 
+                                ? 'brightness(1.15) drop-shadow(0 0 15px rgba(6,182,212,0.3))' 
+                                : 'none'
                     }}
                 />
               ) : null}
@@ -224,6 +240,11 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
             0% { opacity: 0.8; filter: brightness(1); }
             50% { opacity: 1; filter: brightness(1.2); }
             100% { opacity: 0.8; filter: brightness(1); }
+        }
+        @keyframes listeningRipple {
+            0% { opacity: 0.9; transform: scale(1); box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+            50% { opacity: 0.6; transform: scale(1.02); box-shadow: 0 0 20px 10px rgba(34,197,94,0); }
+            100% { opacity: 0.9; transform: scale(1); box-shadow: 0 0 0 0 rgba(34,197,94,0); }
         }
       `}</style>
     </div>

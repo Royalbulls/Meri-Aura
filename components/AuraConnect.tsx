@@ -1,7 +1,6 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Contact, Persona } from '../types';
-import { generateCreativeContent } from '../services/geminiService';
+import React, { useState, useEffect } from 'react';
+import { Persona } from '../types';
 
 interface AuraConnectProps {
     isOpen: boolean;
@@ -9,1157 +8,447 @@ interface AuraConnectProps {
     currentPersona: Persona;
 }
 
-interface CallLog {
-    id: string;
-    contactId: string;
-    contactName: string;
-    type: 'incoming' | 'outgoing' | 'missed' | 'voicemail';
-    timestamp: number;
-    duration: string;
-    notes?: string;
-}
+const MOCK_LEADS = [
+    { id: '1', name: 'Rajesh Malhotra', company: 'Malhotra FinTech', value: '$12,500', status: 'Hot', stage: 'Negotiation', tag: 'High ROI', icon: '👤', lastContact: '2h ago', email: 'rajesh@fintech.in', phone: '+91 98765 43210' },
+    { id: '2', name: 'Priya Sharma', company: 'Sharma Logistics', value: '$8,200', status: 'Nurture', stage: 'Proposal', tag: 'Enterprise', icon: '👩‍💼', lastContact: '1d ago', email: 'priya@sharma.log', phone: '+91 98234 56789' },
+    { id: '3', name: 'Vikram Singh', company: 'Singh Automotive', value: '$25,000', status: 'Hot', stage: 'Closing', tag: 'Strategic', icon: '👨‍🔧', lastContact: '5m ago', email: 'vikram@singh.auto', phone: '+91 91234 56789' },
+    { id: '4', name: 'Anjali Desai', company: 'Desai Retail', value: '$4,100', status: 'Cold', stage: 'Lead', tag: 'Small Biz', icon: '👩‍🎨', lastContact: '3d ago', email: 'anjali@desai.shop', phone: '+91 99887 76655' },
+    { id: '5', name: 'Siddharth Mehra', company: 'Mehra Energy', value: '$11,000', status: 'Hot', stage: 'Qualification', tag: 'Cloud Mig', icon: '👨‍💼', lastContact: '1h ago', email: 'sid@mehra.energy', phone: '+91 97766 55443' },
+];
 
-// Helper: Generate Initials
-const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+const CAMPAIGN_METRICS = [
+    { id: 'wa', label: 'WhatsApp Dominance', icon: '💬', reach: '12.4K', conversion: 18.5, color: '#10b981', roi: '5.2x' },
+    { id: 'li', label: 'LinkedIn Enterprise', icon: '💼', reach: '3.2K', conversion: 24.2, color: '#3b82f6', roi: '8.1x' },
+    { id: 'em', label: 'Ghost Email Suite', icon: '📧', reach: '45K', conversion: 4.8, color: '#6366f1', roi: '3.4x' },
+    { id: 'ig', label: 'Viral Meta Protocol', icon: '📸', reach: '150K', conversion: 2.1, color: '#ec4899', roi: '4.2x' },
+];
 
-// Helper: Dynamic Avatar Color (Premium Palette)
-const getAvatarColor = (name: string) => {
-    const gradients = [
-        'from-pink-600 to-rose-900',
-        'from-purple-600 to-indigo-900',
-        'from-cyan-600 to-blue-900',
-        'from-amber-600 to-orange-900',
-        'from-emerald-600 to-teal-900'
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    return `bg-gradient-to-br ${gradients[Math.abs(hash) % gradients.length]}`;
-};
-
-// Helper: Relative Time
-const getRelativeTime = (timestamp: number) => {
-    const diff = Date.now() - timestamp;
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days}d ago`;
-    return new Date(timestamp).toLocaleDateString();
-};
+const GROWTH_DATA = [
+    { m: 'J', v: 1200 }, { m: 'F', v: 2100 }, { m: 'M', v: 1800 }, { m: 'A', v: 3500 },
+    { m: 'M', v: 4200 }, { m: 'J', v: 3900 }, { m: 'J', v: 5800 }, { m: 'A', v: 7200 },
+    { m: 'S', v: 8100 }, { m: 'O', v: 9500 }, { m: 'N', v: 11200 }, { m: 'D', v: 12400 }
+];
 
 export const AuraConnect: React.FC<AuraConnectProps> = ({ isOpen, onClose, currentPersona }) => {
-    const [contacts, setContacts] = useState<Contact[]>([]);
-    const [callLogs, setCallLogs] = useState<CallLog[]>([]);
-    const [view, setView] = useState<'dashboard' | 'add' | 'campaign' | 'history' | 'detail'>('dashboard');
-    const [activeContact, setActiveContact] = useState<Contact | null>(null);
-    const [campaignMode, setCampaignMode] = useState<'message' | 'call' | 'email'>('message');
-    const [newContact, setNewContact] = useState({ name: '', phone: '', email: '', notes: '', tags: '' });
-    const [taskInput, setTaskInput] = useState('');
-    const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-    
-    // Campaign Execution State
-    const [campaignStep, setCampaignStep] = useState<'setup' | 'review'>('setup');
-    const [campaignResults, setCampaignResults] = useState<{ contactId: string; content: string; status: 'pending' | 'completed' }[]>([]);
+    const [activeTab, setActiveTab] = useState<'overview' | 'universe' | 'campaigns'>('overview');
+    const [selectedLead, setSelectedLead] = useState<any>(null);
+    const [isLoaded, setIsLoaded] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
 
-    // Power Dialer State
-    const [isPowerDialing, setIsPowerDialing] = useState(false);
-    const [powerDialIndex, setPowerDialIndex] = useState(0);
-    const [callDuration, setCallDuration] = useState(0);
-    const dialTimerRef = useRef<number | null>(null);
-
-    // History State
-    const [historyFilter, setHistoryFilter] = useState<'all' | 'incoming' | 'outgoing' | 'missed'>('all');
-    const [showLogModal, setShowLogModal] = useState(false);
-    const [manualLog, setManualLog] = useState({ contactId: '', type: 'incoming', duration: '', notes: '', date: '' });
-
-    const importInputRef = useRef<HTMLInputElement>(null);
-
-    // Load data on mount
     useEffect(() => {
-        const savedContacts = localStorage.getItem('aura_crm_contacts');
-        if (savedContacts) {
-            try {
-                setContacts(JSON.parse(savedContacts));
-            } catch (e) {
-                console.error("Failed to load contacts", e);
-            }
-        }
-        const savedLogs = localStorage.getItem('aura_call_history');
-        if (savedLogs) {
-            try {
-                setCallLogs(JSON.parse(savedLogs));
-            } catch(e) {
-                console.error("Failed to load call logs", e);
-            }
-        }
-    }, []);
-
-    // Timer for Power Dialer
-    useEffect(() => {
-        if (isPowerDialing) {
-            dialTimerRef.current = window.setInterval(() => {
-                setCallDuration(prev => prev + 1);
-            }, 1000);
+        if (isOpen) {
+            const timer = setTimeout(() => setIsLoaded(true), 300);
+            return () => clearTimeout(timer);
         } else {
-            if (dialTimerRef.current) clearInterval(dialTimerRef.current);
-            setCallDuration(0);
+            setIsLoaded(false);
         }
-        return () => {
-            if (dialTimerRef.current) clearInterval(dialTimerRef.current);
-        };
-    }, [isPowerDialing, powerDialIndex]);
-
-    const saveContacts = (updated: Contact[]) => {
-        setContacts(updated);
-        localStorage.setItem('aura_crm_contacts', JSON.stringify(updated));
-    };
-
-    const saveLogs = (logs: CallLog[]) => {
-        setCallLogs(logs);
-        localStorage.setItem('aura_call_history', JSON.stringify(logs));
-    };
-
-    const getLastContactDate = (contactId: string) => {
-        const logs = callLogs.filter(l => l.contactId === contactId);
-        if (logs.length === 0) return null;
-        return Math.max(...logs.map(l => l.timestamp));
-    };
-
-    const formatDuration = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
-
-    const handleAddContact = (e: React.FormEvent) => {
-        e.preventDefault();
-        const contact: Contact = {
-            id: Date.now().toString(),
-            name: newContact.name,
-            phone: newContact.phone,
-            email: newContact.email,
-            notes: newContact.notes,
-            tags: newContact.tags.split(',').map(t => t.trim()).filter(t => t)
-        };
-        saveContacts([...contacts, contact]);
-        setNewContact({ name: '', phone: '', email: '', notes: '', tags: '' });
-        setView('dashboard');
-    };
-
-    const handleDeleteContact = (id: string, e?: React.MouseEvent) => {
-        if (e) e.stopPropagation();
-        if (window.confirm("Delete this contact?")) {
-            saveContacts(contacts.filter(c => c.id !== id));
-            if (activeContact?.id === id) {
-                setActiveContact(null);
-                setView('dashboard');
-            }
-        }
-    };
-
-    const toggleSelectContact = (id: string) => {
-        setSelectedContacts(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
-    };
-
-    const selectAllContacts = () => {
-        if (selectedContacts.length === contacts.length) setSelectedContacts([]);
-        else setSelectedContacts(contacts.map(c => c.id));
-    };
-
-    const openContactDetail = (contact: Contact) => {
-        setActiveContact(contact);
-        setView('detail');
-    };
-
-    // Filter contacts based on search
-    const filteredContacts = contacts.filter(c => 
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.phone.includes(searchTerm) ||
-        c.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-
-    // --- SMART CSV IMPORT LOGIC ---
-    const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const text = event.target?.result as string;
-            if (!text) return;
-
-            const lines = text.split('\n').filter(l => l.trim());
-            if (lines.length < 2) return;
-
-            const parseLine = (line: string) => {
-                const result = [];
-                let startValueIndex = 0;
-                let inQuotes = false;
-                for (let i = 0; i < line.length; i++) {
-                    if (line[i] === '"') {
-                        inQuotes = !inQuotes;
-                    } else if (line[i] === ',' && !inQuotes) {
-                        let val = line.substring(startValueIndex, i).trim();
-                        if (val.startsWith('"') && val.endsWith('"')) {
-                            val = val.substring(1, val.length - 1);
-                        }
-                        result.push(val.replace(/""/g, '"'));
-                        startValueIndex = i + 1;
-                    }
-                }
-                let lastVal = line.substring(startValueIndex).trim();
-                if (lastVal.startsWith('"') && lastVal.endsWith('"')) {
-                    lastVal = lastVal.substring(1, lastVal.length - 1);
-                }
-                result.push(lastVal.replace(/""/g, '"'));
-                return result;
-            };
-
-            const headers = parseLine(lines[0]).map(h => h.toLowerCase());
-            
-            const nameIndex = headers.findIndex(h => h.includes('name') || h.includes('first'));
-            const phoneIndex = headers.findIndex(h => h.includes('phone') || h.includes('mobile') || h.includes('cell'));
-            const emailIndex = headers.findIndex(h => h.includes('email') || h.includes('e-mail'));
-
-            if (nameIndex === -1) {
-                alert("Error: Could not find a 'Name' column in the CSV.");
-                return;
-            }
-
-            const newContacts: Contact[] = [];
-            
-            for (let i = 1; i < lines.length; i++) {
-                const row = parseLine(lines[i]);
-                if (row.length <= nameIndex) continue;
-
-                const name = row[nameIndex];
-                let phone = (phoneIndex !== -1 && row.length > phoneIndex) ? row[phoneIndex] : '';
-                const email = (emailIndex !== -1 && row.length > emailIndex) ? row[emailIndex] : '';
-
-                if (phone) phone = phone.replace(/[^0-9+]/g, ''); 
-
-                if (name) {
-                    const exists = contacts.some(c => c.name === name) || newContacts.some(nc => nc.name === name);
-                    if (!exists) {
-                        newContacts.push({
-                            id: Date.now().toString() + Math.random(),
-                            name: name,
-                            phone: phone,
-                            email: email,
-                            notes: 'Imported Contact',
-                            tags: ['Imported']
-                        });
-                    }
-                }
-            }
-
-            if (newContacts.length > 0) {
-                saveContacts([...contacts, ...newContacts]);
-                alert(`✅ Successfully imported ${newContacts.length} contacts!`);
-            } else {
-                alert("No new contacts found or format invalid.");
-            }
-            if (importInputRef.current) importInputRef.current.value = '';
-        };
-        reader.readAsText(file);
-    };
-
-    // --- AI CAMPAIGN EXECUTION ---
-    const handleRunCampaign = async () => {
-        if (!taskInput || selectedContacts.length === 0) return;
-        setIsProcessing(true);
-        setCampaignResults([]);
-
-        const newResults: { contactId: string; content: string; status: 'pending' | 'completed' }[] = [];
-
-        const promises = selectedContacts.map(async (id) => {
-            const contact = contacts.find(c => c.id === id);
-            if (!contact) return;
-
-            try {
-                let prompt = "";
-                if (campaignMode === 'message') {
-                    prompt = `ACT AS AURA. Draft a personal WhatsApp message for ${contact.name}. Context: ${contact.notes}. Goal: ${taskInput}. Tone: Friendly, Human, Emojis. Return ONLY message.`;
-                } else if (campaignMode === 'call') {
-                    prompt = `ACT AS AURA. Write a phone script for ${contact.name}. Context: ${contact.notes}. Goal: ${taskInput}. Return bullet points (HTML).`;
-                } else if (campaignMode === 'email') {
-                    prompt = `ACT AS AURA. Draft cold email for ${contact.name}. Goal: ${taskInput}. Return: SUBJECT: ... BODY: ...`;
-                }
-                
-                const response = await generateCreativeContent('blog_post', prompt, currentPersona); 
-                newResults.push({
-                    contactId: id,
-                    content: response.text.replace(/```html|```/g, '').trim(),
-                    status: 'pending'
-                });
-            } catch (e) {
-                newResults.push({
-                    contactId: id,
-                    content: "Error generating content.",
-                    status: 'pending'
-                });
-            }
-        });
-
-        await Promise.all(promises);
-
-        setCampaignResults(newResults);
-        setCampaignStep('review');
-        setIsProcessing(false);
-    };
-
-    const sendWhatsApp = (phone: string, text: string) => {
-        const cleanText = text.replace(/<[^>]*>?/gm, '');
-        const encodedText = encodeURIComponent(cleanText);
-        window.open(`https://wa.me/${phone}?text=${encodedText}`, '_blank');
-    };
-
-    const makeCall = (contact: Contact) => {
-        window.open(`tel:${contact.phone}`, '_self');
-        const newLog: CallLog = {
-            id: Date.now().toString(),
-            contactId: contact.id,
-            contactName: contact.name,
-            type: 'outgoing',
-            timestamp: Date.now(),
-            duration: 'Dialed'
-        };
-        saveLogs([newLog, ...callLogs]);
-    };
-
-    const sendEmail = (email: string, fullContent: string) => {
-        let subject = "New Message";
-        let body = fullContent;
-
-        const subjectMatch = fullContent.match(/SUBJECT:(.*?)(\n|BODY:|$)/i);
-        const bodyMatch = fullContent.split(/BODY:/i);
-
-        if (subjectMatch && subjectMatch[1]) {
-            subject = subjectMatch[1].trim();
-        }
-        if (bodyMatch.length > 1) {
-            body = bodyMatch[1].trim();
-        } else if (subjectMatch) {
-            body = fullContent.replace(subjectMatch[0], '').trim();
-        }
-
-        const mailto = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        window.open(mailto, '_blank');
-    };
-
-    const executeCampaignAction = (index: number) => {
-        const result = campaignResults[index];
-        const contact = contacts.find(c => c.id === result.contactId);
-        if (!contact) return;
-
-        if (campaignMode === 'message') sendWhatsApp(contact.phone, result.content);
-        else if (campaignMode === 'email') sendEmail(contact.email || '', result.content);
-        else if (campaignMode === 'call') makeCall(contact);
-
-        setCampaignResults(prev => prev.map((r, i) => i === index ? { ...r, status: 'completed' } : r));
-    };
-
-    const runAutoPilot = async () => {
-        if (!window.confirm("Aura will now attempt to automate this campaign.")) return;
-        
-        // --- POWER DIALER MODE ---
-        if (campaignMode === 'call') {
-            setIsPowerDialing(true);
-            setPowerDialIndex(0);
-            
-            // Trigger first call immediately
-            const result = campaignResults[0];
-            const contact = contacts.find(c => c.id === result.contactId);
-            if (contact) {
-                // We use timeout to allow the React state to update UI first
-                setTimeout(() => {
-                    window.open(`tel:${contact.phone}`, '_self');
-                }, 500);
-            }
-            return;
-        }
-
-        // Existing Message/Email Auto-Pilot
-        for (let i = 0; i < campaignResults.length; i++) {
-            if (campaignResults[i].status === 'pending') {
-                executeCampaignAction(i);
-                // Artificial delay to allow browser to handle opening tabs and prevent blocking
-                await new Promise(r => setTimeout(r, 1500)); 
-            }
-        }
-    };
-
-    // --- POWER DIALER LOGIC ---
-    const handlePowerDialOutcome = (type: 'outgoing' | 'voicemail' | 'missed') => {
-        const result = campaignResults[powerDialIndex];
-        const contact = contacts.find(c => c.id === result.contactId);
-        
-        if (contact) {
-            // 1. Log the call
-            const newLog: CallLog = {
-                id: Date.now().toString(),
-                contactId: contact.id,
-                contactName: contact.name,
-                type: type,
-                timestamp: Date.now(),
-                duration: formatDuration(callDuration),
-                notes: `Power Dialer: ${type === 'voicemail' ? 'Left VM' : type === 'missed' ? 'No Answer' : 'Connected'}`
-            };
-            saveLogs([newLog, ...callLogs]);
-
-            // 2. Mark campaign item as complete
-            setCampaignResults(prev => prev.map((r, i) => i === powerDialIndex ? { ...r, status: 'completed' } : r));
-        }
-
-        // 3. Move to next
-        const nextIndex = powerDialIndex + 1;
-        if (nextIndex < campaignResults.length) {
-            setPowerDialIndex(nextIndex);
-            setCallDuration(0);
-            
-            // 4. Trigger Next Dial (Autonomous Chain)
-            const nextResult = campaignResults[nextIndex];
-            const nextContact = contacts.find(c => c.id === nextResult.contactId);
-            if (nextContact) {
-                // Small delay for UX transition
-                setTimeout(() => {
-                    window.open(`tel:${nextContact.phone}`, '_self');
-                }, 1000);
-            }
-        } else {
-            // Finished
-            setIsPowerDialing(false);
-            alert("Power Dialing Session Complete!");
-        }
-    };
-
-    const handleManualLog = (e: React.FormEvent) => {
-        e.preventDefault();
-        const contact = contacts.find(c => c.id === manualLog.contactId);
-        if (!contact) return;
-
-        const timestamp = manualLog.date ? new Date(manualLog.date).getTime() : Date.now();
-
-        const newLog: CallLog = {
-            id: Date.now().toString(),
-            contactId: contact.id,
-            contactName: contact.name,
-            type: manualLog.type as any,
-            timestamp: timestamp,
-            duration: manualLog.duration || '0m',
-            notes: manualLog.notes
-        };
-        
-        saveLogs([newLog, ...callLogs]);
-        setShowLogModal(false);
-        setManualLog({ contactId: '', type: 'incoming', duration: '', notes: '', date: '' });
-    };
-
-    const filteredLogs = historyFilter === 'all' 
-        ? callLogs 
-        : callLogs.filter(log => log.type === historyFilter);
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
-    // --- POWER DIALER OVERLAY ---
-    if (isPowerDialing && campaignResults[powerDialIndex]) {
-        const result = campaignResults[powerDialIndex];
-        const contact = contacts.find(c => c.id === result.contactId);
-        const progress = Math.round(((powerDialIndex + 1) / campaignResults.length) * 100);
+    const filteredLeads = MOCK_LEADS.filter(l => 
+        l.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        l.company.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
-        return (
-            <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center font-sans text-white">
-                <div className="w-full max-w-2xl bg-[#121212] border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[90vh]">
-                    
-                    {/* Header */}
-                    <div className="p-6 bg-gradient-to-r from-green-900/40 to-blue-900/40 border-b border-white/10 flex justify-between items-center">
-                        <div>
-                            <h2 className="text-xl font-bold animate-pulse text-green-400">⚡ Power Dialer Active</h2>
-                            <p className="text-xs text-white/50 uppercase tracking-widest mt-1">Autonomous Agent Mode</p>
+    // SVG Line/Area Path Helpers
+    const getChartPath = (isArea: boolean) => {
+        const w = 1000;
+        const h = 200;
+        const max = 13000;
+        const points = GROWTH_DATA.map((d, i) => {
+            const x = (i / (GROWTH_DATA.length - 1)) * w;
+            const y = h - (d.v / max) * h;
+            return `${x},${y}`;
+        });
+        if (isArea) return `M0,${h} L${points.join(' L')} L${w},${h} Z`;
+        return `M${points.join(' L')}`;
+    };
+
+    return (
+        <div className="absolute inset-0 z-[150] bg-[#020205] flex flex-col font-sans text-white animate-in slide-in-from-right duration-500 overflow-hidden select-none">
+            
+            {/* --- PREMIUM CONTROL HEADER --- */}
+            <div className="h-24 border-b border-white/5 flex justify-between items-center px-8 bg-black/40 backdrop-blur-3xl z-50 shrink-0">
+                <div className="flex items-center gap-6">
+                    <div className="w-14 h-14 bg-gradient-to-tr from-blue-600 to-indigo-800 rounded-2xl flex items-center justify-center text-3xl shadow-[0_0_40px_rgba(37,99,235,0.3)] border border-white/10 group cursor-pointer">
+                        <span className="group-hover:rotate-12 transition-transform">🤝</span>
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-xl font-black tracking-tighter uppercase">Aura Connect</h2>
+                            <span className="text-[9px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-black border border-blue-500/30 uppercase tracking-widest">Enterprise Elite</span>
                         </div>
-                        <div className="text-right">
-                            <div className="text-3xl font-mono font-bold">{formatDuration(callDuration)}</div>
-                            <div className="text-xs text-white/40">Duration</div>
+                        <p className="text-[10px] text-white/30 font-bold uppercase tracking-[0.3em] mt-1 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Neural CRM Synchronized
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <div className="hidden lg:flex items-center gap-8 bg-white/5 px-6 py-2.5 rounded-2xl border border-white/5 shadow-inner">
+                        <div className="text-center">
+                            <div className="text-[9px] font-black text-white/20 uppercase mb-0.5">Pipeline</div>
+                            <div className="text-lg font-black text-blue-400">$1.4M</div>
+                        </div>
+                        <div className="w-px h-8 bg-white/10"></div>
+                        <div className="text-center">
+                            <div className="text-[9px] font-black text-white/20 uppercase mb-0.5">Avg ROI</div>
+                            <div className="text-lg font-black text-emerald-400">4.8x</div>
                         </div>
                     </div>
-
-                    {/* Main Content */}
-                    <div className="flex-1 p-8 flex flex-col gap-6 overflow-y-auto">
-                        
-                        {/* Contact Card */}
-                        <div className="flex items-center gap-6 p-6 bg-white/5 rounded-3xl border border-white/10">
-                            <div className={`w-20 h-20 rounded-full ${getAvatarColor(contact?.name || '?')} flex items-center justify-center text-3xl font-bold border-4 border-[#121212] shadow-xl`}>
-                                {getInitials(contact?.name || '?')}
-                            </div>
-                            <div>
-                                <h3 className="text-2xl font-bold">{contact?.name}</h3>
-                                <p className="text-lg text-white/60 font-mono mt-1">{contact?.phone}</p>
-                                <div className="flex gap-2 mt-2">
-                                    {contact?.tags.map((tag, i) => (
-                                        <span key={i} className="px-2 py-1 bg-white/10 rounded text-[10px] uppercase font-bold text-white/50">{tag}</span>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Script */}
-                        <div className="flex-1 bg-black/30 rounded-2xl p-6 border border-white/5 overflow-y-auto relative">
-                            <div className="absolute top-4 right-4 text-[10px] text-white/30 uppercase font-bold border border-white/10 px-2 py-1 rounded">Script</div>
-                            <p className="whitespace-pre-wrap text-sm leading-loose text-white/80 font-medium">
-                                {result.content}
-                            </p>
-                        </div>
-
-                        {/* Controls */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <button 
-                                onClick={() => handlePowerDialOutcome('outgoing')}
-                                className="p-4 bg-green-600 hover:bg-green-500 rounded-2xl font-bold text-sm shadow-lg active:scale-95 transition-all flex flex-col items-center gap-1"
-                            >
-                                <span className="text-xl">✅</span>
-                                Connected
-                            </button>
-                            <button 
-                                onClick={() => handlePowerDialOutcome('voicemail')}
-                                className="p-4 bg-amber-600 hover:bg-amber-500 rounded-2xl font-bold text-sm shadow-lg active:scale-95 transition-all flex flex-col items-center gap-1"
-                            >
-                                <span className="text-xl">🗣️</span>
-                                Voicemail
-                            </button>
-                            <button 
-                                onClick={() => handlePowerDialOutcome('missed')}
-                                className="p-4 bg-red-600 hover:bg-red-500 rounded-2xl font-bold text-sm shadow-lg active:scale-95 transition-all flex flex-col items-center gap-1"
-                            >
-                                <span className="text-xl">⛔</span>
-                                No Answer
-                            </button>
-                            <button 
-                                onClick={() => { if(confirm("Stop Power Dialer?")) setIsPowerDialing(false); }}
-                                className="p-4 bg-white/10 hover:bg-white/20 rounded-2xl font-bold text-sm shadow-lg active:scale-95 transition-all flex flex-col items-center gap-1 border border-white/10 text-white/50 hover:text-white"
-                            >
-                                <span className="text-xl">⏹️</span>
-                                Stop
-                            </button>
-                        </div>
-
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="h-2 bg-white/5">
-                        <div 
-                            className="h-full bg-gradient-to-r from-green-500 to-blue-500 transition-all duration-300"
-                            style={{ width: `${progress}%` }}
-                        ></div>
-                    </div>
-                    <div className="p-2 text-center text-[10px] text-white/30 uppercase font-bold tracking-widest">
-                        Call {powerDialIndex + 1} of {campaignResults.length}
-                    </div>
+                    <button onClick={onClose} className="w-12 h-12 bg-white/5 hover:bg-red-500/20 rounded-2xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 border border-white/10 group">
+                        <span className="text-white/40 group-hover:text-white transition-colors">✕</span>
+                    </button>
                 </div>
             </div>
-        );
-    }
 
-    // --- RENDER ---
-    return (
-        <div className="fixed inset-0 z-[150] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 font-sans text-white">
-            <div className="w-full max-w-7xl h-[90vh] bg-[#0a0a0c] border border-white/10 rounded-[32px] overflow-hidden flex flex-col shadow-2xl relative ring-1 ring-white/5">
+            <div className="flex-1 flex overflow-hidden">
                 
-                {/* Global Header */}
-                <div className="px-8 py-5 border-b border-white/5 bg-[#0f0f13]/80 backdrop-blur-md flex justify-between items-center shrink-0 z-20">
-                    <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-600 to-purple-800 text-white flex items-center justify-center text-xl shadow-[0_0_20px_rgba(236,72,153,0.3)]">
-                            ⚡
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-black tracking-tight text-white uppercase font-sans">Aura Connect</h2>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                                <p className="text-[10px] text-white/40 uppercase tracking-[0.2em] font-bold">Network Intelligence</p>
+                {/* --- NAVIGATION SIDEBAR --- */}
+                <div className="w-20 lg:w-72 bg-black/40 border-r border-white/5 flex flex-col p-4 gap-4 z-40 shrink-0">
+                    {[
+                        { id: 'overview', label: 'Executive Overview', icon: '📊', desc: 'Performance Intelligence' },
+                        { id: 'universe', label: 'Client Universe', icon: '👥', desc: 'Target Database' },
+                        { id: 'campaigns', label: 'Campaign Lab', icon: '🚀', desc: 'Growth Engine' }
+                    ].map(item => (
+                        <button 
+                            key={item.id}
+                            onClick={() => setActiveTab(item.id as any)}
+                            className={`w-full p-4 rounded-[1.5rem] flex flex-col lg:flex-row items-center gap-4 transition-all duration-300 relative group overflow-hidden ${
+                                activeTab === item.id 
+                                ? 'bg-blue-600 shadow-[0_20px_40px_rgba(37,99,235,0.2)] text-white scale-[1.02] border border-white/20' 
+                                : 'hover:bg-white/5 text-white/40 hover:text-white'
+                            }`}
+                        >
+                            <span className="text-2xl drop-shadow-md">{item.icon}</span>
+                            <div className="hidden lg:block text-left">
+                                <div className="text-[11px] font-black uppercase tracking-wider">{item.label}</div>
+                                <div className="text-[8px] opacity-40 font-bold uppercase truncate max-w-[150px]">{item.desc}</div>
                             </div>
+                        </button>
+                    ))}
+                    
+                    <div className="mt-auto hidden lg:block">
+                        <div className="p-5 bg-gradient-to-br from-indigo-900/40 to-black border border-indigo-500/20 rounded-3xl relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10 text-4xl">💡</div>
+                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Bestie Tip</p>
+                            <p className="text-[11px] text-white/60 italic leading-relaxed">
+                                "Bhai, Vikram Singh ki deal 90% closing stage par hai. Ek follow-up aur, and target achieved! 🔥"
+                            </p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all">✕</button>
                 </div>
 
-                {/* Main Content Split */}
-                <div className="flex-1 flex overflow-hidden">
+                {/* --- WORKSPACE ENGINE --- */}
+                <div className="flex-1 overflow-y-auto p-6 lg:p-12 custom-scrollbar bg-[radial-gradient(circle_at_50%_0%,_rgba(37,99,235,0.05)_0%,_transparent_50%)]">
                     
-                    {/* Sidebar / Navigation */}
-                    <div className={`w-full md:w-80 bg-[#0f0f13]/90 border-r border-white/5 flex flex-col z-10 transition-all duration-300 ${view !== 'dashboard' && view !== 'detail' && 'hidden md:flex'} ${(view === 'detail') && 'hidden md:flex'}`}>
-                        
-                        {/* Toolbar */}
-                        <div className="p-5 space-y-4 border-b border-white/5">
-                            {/* Primary Actions */}
-                            <div className="grid grid-cols-2 gap-3">
-                                <button 
-                                    onClick={() => setView('add')}
-                                    className="py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl text-xs font-bold text-white transition-all flex items-center justify-center gap-2 group active:scale-95"
-                                >
-                                    <span className="text-pink-400 group-hover:text-white transition-colors">+</span> New Contact
-                                </button>
-                                <button 
-                                    onClick={() => { setView('campaign'); setCampaignStep('setup'); }}
-                                    className="py-3 bg-gradient-to-r from-pink-600/80 to-purple-600/80 hover:from-pink-500 hover:to-purple-500 border border-white/10 rounded-xl text-xs font-bold text-white transition-all shadow-lg shadow-purple-900/20 flex items-center justify-center gap-2 group active:scale-95"
-                                >
-                                    <span>🚀</span> Campaign
-                                </button>
-                            </div>
+                    {/* TAB 1: OVERVIEW */}
+                    {activeTab === 'overview' && (
+                        <div className="max-w-6xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
                             
-                            {/* Nav Tabs */}
-                            <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
-                                <button 
-                                    onClick={() => setView('dashboard')}
-                                    className={`flex-1 py-2 rounded-lg text-[10px] uppercase font-bold tracking-wider transition-all ${view === 'dashboard' ? 'bg-white/10 text-white shadow-sm' : 'text-white/40 hover:text-white'}`}
-                                >
-                                    Dashboard
-                                </button>
-                                <button 
-                                    onClick={() => setView('history')}
-                                    className={`flex-1 py-2 rounded-lg text-[10px] uppercase font-bold tracking-wider transition-all ${view === 'history' ? 'bg-white/10 text-white shadow-sm' : 'text-white/40 hover:text-white'}`}
-                                >
-                                    History
-                                </button>
+                            {/* Visual KPI Grid */}
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                                {[
+                                    { label: 'Network Reach', val: '12.4K', trend: '↑ 24%', col: 'blue' },
+                                    { label: 'Active Leads', val: '342', trend: '↑ 12%', col: 'purple' },
+                                    { label: 'Conversion', val: '8.4%', trend: '↑ 0.8%', col: 'emerald' },
+                                    { label: 'Churn Rate', val: '1.2%', trend: '↓ 0.2%', col: 'red' }
+                                ].map((kpi, i) => (
+                                    <div key={i} className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem] shadow-2xl relative overflow-hidden group hover:border-white/20 transition-all hover:-translate-y-1">
+                                        <div className={`absolute -right-8 -top-8 w-24 h-24 bg-${kpi.col}-500/5 blur-3xl`}></div>
+                                        <div className={`text-[9px] font-black text-${kpi.col}-400 uppercase tracking-[0.3em] mb-6`}>{kpi.label}</div>
+                                        <div className="text-4xl font-black tracking-tighter mb-1">{kpi.val}</div>
+                                        <div className={`text-[10px] font-bold ${kpi.trend.includes('↑') ? 'text-emerald-400' : 'text-red-400'}`}>{kpi.trend} <span className="text-white/20 ml-1">vs last month</span></div>
+                                    </div>
+                                ))}
                             </div>
 
-                            {/* Search */}
-                            <div className="relative group">
-                                <input 
-                                    type="text" 
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="Search network..."
-                                    className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-xs text-white placeholder-white/20 focus:border-pink-500/50 focus:bg-white/5 outline-none transition-all"
-                                />
-                                <svg className="w-4 h-4 text-white/30 absolute left-3 top-3 group-focus-within:text-pink-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                </svg>
-                            </div>
-                        </div>
-                        
-                        {/* Contact List */}
-                        <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
-                            {contacts.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-center text-white/30 space-y-4">
-                                    <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center text-3xl grayscale opacity-20">👥</div>
-                                    <div>
-                                        <p className="text-xs font-bold text-white/40 uppercase tracking-wide">Network Offline</p>
-                                        <button onClick={() => importInputRef.current?.click()} className="text-[10px] text-pink-400 mt-2 hover:text-pink-300 font-bold flex items-center justify-center gap-1 mx-auto transition-colors border border-pink-500/30 px-3 py-1.5 rounded-lg hover:bg-pink-500/10">
-                                            <span>📥</span> Import CSV
-                                            <input type="file" ref={importInputRef} accept=".csv" onChange={handleImportCSV} className="hidden" />
-                                        </button>
+                            {/* MAIN CHARTS SECTION */}
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                                
+                                {/* GROWTH AREA CHART */}
+                                <div className="lg:col-span-2 p-10 bg-black/60 border border-white/10 rounded-[3.5rem] min-h-[450px] flex flex-col shadow-2xl backdrop-blur-2xl relative group">
+                                    <div className="flex justify-between items-center mb-12">
+                                        <div>
+                                            <h3 className="text-[10px] font-black uppercase tracking-[0.5em] text-white/30 mb-1">Scale Analytics</h3>
+                                            <div className="text-2xl font-black">Contact Acquisition Flow</div>
+                                        </div>
+                                        <div className="px-4 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-[9px] font-black text-blue-400 tracking-[0.2em]">LIVE DATA STREAM</div>
                                     </div>
-                                </div>
-                            ) : (
-                                filteredContacts.map(c => {
-                                    const lastSeen = getLastContactDate(c.id);
-                                    return (
-                                        <div 
-                                            key={c.id} 
-                                            className={`p-3 rounded-xl border transition-all group relative cursor-pointer ${activeContact?.id === c.id ? 'bg-white/10 border-white/20 shadow-lg' : 'bg-transparent border-transparent hover:bg-white/5 hover:border-white/5'}`}
-                                            onClick={() => openContactDetail(c)}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                {/* Avatar */}
-                                                <div className={`w-9 h-9 rounded-lg ${getAvatarColor(c.name)} flex items-center justify-center text-white font-bold text-[10px] shadow-inner shrink-0 ring-1 ring-white/10`}>
-                                                    {getInitials(c.name)}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex justify-between items-center mb-0.5">
-                                                        <h4 className={`font-bold text-xs truncate transition-colors ${activeContact?.id === c.id ? 'text-white' : 'text-white/80 group-hover:text-white'}`}>{c.name}</h4>
-                                                        {lastSeen && <span className="text-[9px] text-white/20 whitespace-nowrap">{getRelativeTime(lastSeen)}</span>}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <p className="text-[10px] text-white/40 font-mono truncate">{c.phone}</p>
-                                                        {c.tags.length > 0 && <span className="w-1 h-1 rounded-full bg-white/20"></span>}
-                                                        <p className="text-[9px] text-pink-400/70 truncate">{c.tags[0]}</p>
-                                                    </div>
-                                                </div>
-                                                
-                                                {/* Hover Arrow */}
-                                                <div className="text-white/20 opacity-0 group-hover:opacity-100 transition-opacity transform group-hover:translate-x-1">→</div>
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                    </div>
 
-                    {/* Right Panel: Workspace */}
-                    <div className="flex-1 bg-[#0a0a0c] relative overflow-hidden flex flex-col">
-                        
-                        {/* VIEW: DASHBOARD */}
-                        {view === 'dashboard' && (
-                            <div className="flex-1 flex flex-col p-8 md:p-12 relative overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-500">
-                                {/* Welcome Header */}
-                                <div className="mb-10">
-                                    <h3 className="text-3xl md:text-4xl font-black text-white tracking-tight mb-2">Command Center</h3>
-                                    <p className="text-sm text-white/40 font-medium">Overview of your professional network and activities.</p>
-                                </div>
+                                    <div className="flex-1 relative mt-4">
+                                        <svg viewBox="0 0 1000 200" className="w-full h-full overflow-visible">
+                                            <defs>
+                                                <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
+                                                    <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                                                </linearGradient>
+                                            </defs>
+                                            
+                                            {/* Grid */}
+                                            {[0, 50, 100, 150, 200].map(y => <line key={y} x1="0" y1={y} x2="1000" y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="1" />)}
+                                            
+                                            {/* Area */}
+                                            <path 
+                                                d={getChartPath(true)} fill="url(#chartGrad)" 
+                                                className={`transition-all duration-[2s] ease-out origin-bottom ${isLoaded ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0'}`} 
+                                            />
+                                            
+                                            {/* Line */}
+                                            <path 
+                                                d={getChartPath(false)} fill="none" stroke="#3b82f6" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" 
+                                                className={`transition-all duration-[2.5s] ease-out ${isLoaded ? 'dash-offset-0' : 'dash-offset-full'}`}
+                                                style={{ strokeDasharray: 2000, strokeDashoffset: isLoaded ? 0 : 2000 }}
+                                            />
 
-                                {/* Stats Grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-                                    <div className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-3xl p-6 relative overflow-hidden group">
-                                        <div className="absolute inset-0 bg-pink-500/5 group-hover:bg-pink-500/10 transition-colors duration-500"></div>
-                                        <div className="relative z-10 flex justify-between items-start">
-                                            <div>
-                                                <div className="text-[10px] uppercase tracking-widest text-pink-400 font-bold mb-2">Total Contacts</div>
-                                                <div className="text-4xl font-black text-white">{contacts.length}</div>
-                                            </div>
-                                            <div className="w-12 h-12 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-xl text-pink-400">👥</div>
-                                        </div>
-                                        <div className="mt-6 pt-4 border-t border-white/5 flex gap-2">
-                                            <button onClick={() => setView('add')} className="text-xs text-white/60 hover:text-white flex items-center gap-1 transition-colors">
-                                                <span>+</span> Add New
-                                            </button>
+                                            {/* Points */}
+                                            {GROWTH_DATA.map((d, i) => (
+                                                <circle 
+                                                    key={i} cx={(i / (GROWTH_DATA.length - 1)) * 1000} cy={200 - (d.v / 13000) * 200} r="6" 
+                                                    fill="#3b82f6" className={`transition-all duration-1000 ${isLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-0'}`}
+                                                    style={{ transitionDelay: `${i * 100}ms` }}
+                                                />
+                                            ))}
+                                        </svg>
+                                        
+                                        {/* X-Axis */}
+                                        <div className="absolute left-0 right-0 -bottom-8 flex justify-between px-2">
+                                            {GROWTH_DATA.map((d, i) => <span key={i} className="text-[9px] font-black text-white/20">{d.m}</span>)}
                                         </div>
                                     </div>
 
-                                    <div className="bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-3xl p-6 relative overflow-hidden group">
-                                        <div className="absolute inset-0 bg-purple-500/5 group-hover:bg-purple-500/10 transition-colors duration-500"></div>
-                                        <div className="relative z-10 flex justify-between items-start">
-                                            <div>
-                                                <div className="text-[10px] uppercase tracking-widest text-purple-400 font-bold mb-2">Total Interactions</div>
-                                                <div className="text-4xl font-black text-white">{callLogs.length}</div>
-                                            </div>
-                                            <div className="w-12 h-12 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-xl text-purple-400">💬</div>
+                                    <div className="mt-16 flex gap-10 border-t border-white/5 pt-8">
+                                        <div className="flex flex-col">
+                                            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest mb-1">Peak Volume</span>
+                                            <span className="text-xl font-black text-blue-400">12.4K <span className="text-[10px] text-emerald-400">↑ 18%</span></span>
                                         </div>
-                                        <div className="mt-6 pt-4 border-t border-white/5">
-                                            <span className="text-[10px] text-white/30">Last activity: {callLogs.length > 0 ? getRelativeTime(callLogs[0].timestamp) : 'N/A'}</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest mb-1">Growth Forecast</span>
+                                            <span className="text-xl font-black text-white">15K+ <span className="text-[10px] text-blue-400">BY Q2</span></span>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Recent Activity Feed */}
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-end mb-6">
-                                        <h4 className="text-xs font-bold uppercase tracking-widest text-white/40">Live Feed</h4>
-                                        <button onClick={() => setView('history')} className="text-[10px] text-white/30 hover:text-white transition-colors uppercase font-bold">View All</button>
-                                    </div>
+                                {/* DONUT CHART: TARGET DISTRO */}
+                                <div className="p-10 bg-black/60 border border-white/10 rounded-[3.5rem] flex flex-col shadow-2xl backdrop-blur-2xl relative overflow-hidden group">
+                                    <h3 className="text-[10px] font-black uppercase tracking-[0.5em] text-white/30 mb-10">Lead Mix Matrix</h3>
                                     
-                                    {callLogs.length === 0 ? (
-                                        <div className="border border-dashed border-white/10 rounded-3xl p-10 flex flex-col items-center justify-center text-center">
-                                            <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center text-2xl grayscale opacity-30 mb-4">🕸️</div>
-                                            <p className="text-sm text-white/40 font-medium">No activity recorded yet.</p>
-                                            <button onClick={() => setView('add')} className="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-bold text-white transition-all">Start Connecting</button>
+                                    <div className="flex-1 flex flex-col items-center justify-center gap-10">
+                                        <div className="relative w-48 h-48">
+                                            <svg viewBox="0 0 36 36" className="w-full h-full rotate-[-90deg]">
+                                                <circle cx="18" cy="18" r="15.9" fill="transparent" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
+                                                <circle cx="18" cy="18" r="15.9" fill="transparent" stroke="#3b82f6" strokeWidth="4" strokeDasharray="45 100" className={`transition-all duration-[2s] ${isLoaded ? 'opacity-100' : 'opacity-0'}`} />
+                                                <circle cx="18" cy="18" r="15.9" fill="transparent" stroke="#ef4444" strokeWidth="4" strokeDasharray="30 100" strokeDashoffset="-45" className={`transition-all duration-[2s] ${isLoaded ? 'opacity-100' : 'opacity-0'}`} />
+                                                <circle cx="18" cy="18" r="15.9" fill="transparent" stroke="#6366f1" strokeWidth="4" strokeDasharray="25 100" strokeDashoffset="-75" className={`transition-all duration-[2s] ${isLoaded ? 'opacity-100' : 'opacity-0'}`} />
+                                            </svg>
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                <div className="text-3xl font-black tracking-tighter">342</div>
+                                                <div className="text-[8px] font-black text-white/30 uppercase tracking-widest">Active</div>
+                                            </div>
                                         </div>
-                                    ) : (
-                                        <div className="space-y-4 relative pl-4 border-l border-white/5 ml-2">
-                                            {callLogs.slice(0, 5).map((log, i) => (
-                                                <div key={log.id} className="relative pl-6">
-                                                    {/* Timeline Dot */}
-                                                    <div className={`absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-[#0a0a0c] ${log.type === 'outgoing' ? 'bg-green-500' : log.type === 'missed' ? 'bg-red-500' : 'bg-blue-500'}`}></div>
-                                                    
-                                                    <div className="bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 rounded-xl p-4 transition-all group flex justify-between items-center">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${log.type === 'outgoing' ? 'bg-green-500/10 text-green-400' : log.type === 'missed' ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                                                                {log.type === 'outgoing' ? '↗' : log.type === 'missed' ? '↙' : '↙'}
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-sm font-bold text-white group-hover:text-pink-300 transition-colors">{log.contactName}</div>
-                                                                <div className="flex items-center gap-2 mt-0.5">
-                                                                    <span className="text-[10px] text-white/40 uppercase font-bold tracking-wide">{log.type}</span>
-                                                                    <span className="w-1 h-1 rounded-full bg-white/20"></span>
-                                                                    <span className="text-[10px] text-white/40 font-mono">{getRelativeTime(log.timestamp)}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <span className="text-xs font-mono text-white/50 bg-black/20 px-2 py-1 rounded border border-white/5">{log.duration}</span>
-                                                        </div>
+
+                                        <div className="w-full space-y-4">
+                                            {[
+                                                { l: 'Strategic', v: '45%', col: 'bg-blue-500' },
+                                                { l: 'High Risk', v: '30%', col: 'bg-red-500' },
+                                                { l: 'Enterprise', v: '25%', col: 'bg-indigo-500' }
+                                            ].map((item, i) => (
+                                                <div key={i} className="flex justify-between items-center px-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-2 h-2 rounded-full ${item.col} shadow-[0_0_10px_currentColor]`}></div>
+                                                        <span className="text-[10px] font-black uppercase text-white/50">{item.l}</span>
                                                     </div>
+                                                    <span className="text-[10px] font-black">{item.v}</span>
                                                 </div>
                                             ))}
                                         </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* VIEW: DETAIL (DOSSIER STYLE) */}
-                        {view === 'detail' && activeContact && (
-                            <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0a0a0c] animate-in slide-in-from-right-4 duration-500">
-                                {/* Dossier Header */}
-                                <div className="relative h-48 w-full overflow-hidden">
-                                    <div className={`absolute inset-0 opacity-20 blur-3xl scale-150 ${getAvatarColor(activeContact.name)}`}></div>
-                                    <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0a0a0c]"></div>
-                                    
-                                    <div className="absolute bottom-0 left-0 right-0 p-8 flex items-end justify-between">
-                                        <div className="flex items-end gap-6">
-                                            <div className={`w-32 h-32 rounded-2xl ${getAvatarColor(activeContact.name)} flex items-center justify-center text-5xl font-bold text-white shadow-2xl border-4 border-[#0a0a0c] ring-1 ring-white/10 relative z-10`}>
-                                                {getInitials(activeContact.name)}
-                                            </div>
-                                            <div className="pb-2">
-                                                <h1 className="text-4xl font-black text-white tracking-tight mb-2">{activeContact.name}</h1>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {activeContact.tags.map((tag, i) => (
-                                                        <span key={i} className="px-3 py-1 bg-white/10 rounded-lg text-[10px] font-bold uppercase tracking-wider text-white/70 border border-white/10 backdrop-blur-md">
-                                                            {tag}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="flex gap-3 pb-2">
-                                            <button onClick={() => makeCall(activeContact)} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all backdrop-blur-md border border-white/10 hover:scale-105 active:scale-95" title="Call">
-                                                📞
-                                            </button>
-                                            <button onClick={() => sendWhatsApp(activeContact.phone, "")} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all backdrop-blur-md border border-white/10 hover:scale-105 active:scale-95" title="Message">
-                                                💬
-                                            </button>
-                                            {activeContact.email && (
-                                                <button onClick={() => sendEmail(activeContact.email!, "")} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all backdrop-blur-md border border-white/10 hover:scale-105 active:scale-95" title="Email">
-                                                    ✉️
-                                                </button>
-                                            )}
-                                            <div className="w-px h-10 bg-white/10 mx-2"></div>
-                                            <button onClick={(e) => handleDeleteContact(activeContact.id, e)} className="p-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all border border-red-500/20 hover:scale-105 active:scale-95" title="Delete">
-                                                🗑️
-                                            </button>
-                                        </div>
-                                    </div>
-                                    
-                                    <button onClick={() => setView('dashboard')} className="absolute top-6 left-6 px-4 py-2 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-lg text-xs font-bold text-white border border-white/10 transition-all flex items-center gap-2">
-                                        <span>←</span> Back
-                                    </button>
-                                </div>
-
-                                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                        
-                                        {/* Left Column: Info & Context */}
-                                        <div className="lg:col-span-2 space-y-6">
-                                            {/* Contact Details Cards */}
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div className="p-5 bg-white/5 rounded-2xl border border-white/5">
-                                                    <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest mb-2 flex items-center gap-2">
-                                                        <span>📱</span> Mobile
-                                                    </p>
-                                                    <p className="text-lg font-mono text-white tracking-wide">{activeContact.phone}</p>
-                                                </div>
-                                                {activeContact.email && (
-                                                    <div className="p-5 bg-white/5 rounded-2xl border border-white/5 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => sendEmail(activeContact.email!, "")}>
-                                                        <p className="text-[10px] uppercase font-bold text-white/40 tracking-widest mb-2 flex items-center gap-2">
-                                                            <span>📧</span> Email
-                                                        </p>
-                                                        <p className="text-lg font-mono text-white truncate">{activeContact.email}</p>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Intelligence Context */}
-                                            <div className="p-6 bg-gradient-to-br from-[#15151a] to-black border border-white/10 rounded-3xl relative overflow-hidden group">
-                                                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                                                    <span className="text-8xl">🧠</span>
-                                                </div>
-                                                <h4 className="text-xs font-bold text-pink-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                                    <span>📝</span> Intelligence Context
-                                                </h4>
-                                                <div className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap font-medium">
-                                                    {activeContact.notes ? (
-                                                        activeContact.notes
-                                                    ) : (
-                                                        <span className="text-white/30 italic">No context data available. Add notes to help AI generate better messages.</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Right Column: History */}
-                                        <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 h-fit">
-                                            <h4 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-6">Interaction Log</h4>
-                                            
-                                            <div className="space-y-4">
-                                                {callLogs.filter(l => l.contactId === activeContact.id).length === 0 ? (
-                                                    <div className="text-center py-8 text-white/20 text-xs italic">
-                                                        No history recorded.
-                                                    </div>
-                                                ) : (
-                                                    callLogs.filter(l => l.contactId === activeContact.id).sort((a,b) => b.timestamp - a.timestamp).map(log => (
-                                                        <div key={log.id} className="relative pl-4 border-l border-white/10 pb-4 last:pb-0">
-                                                            <div className={`absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full ${log.type === 'outgoing' ? 'bg-green-500' : 'bg-white/20'}`}></div>
-                                                            <div className="flex justify-between items-start">
-                                                                <div>
-                                                                    <p className="text-xs font-bold text-white uppercase">{log.type}</p>
-                                                                    <p className="text-[10px] text-white/40 font-mono mt-0.5">{new Date(log.timestamp).toLocaleDateString()}</p>
-                                                                </div>
-                                                                <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-white/50">{log.duration}</span>
-                                                            </div>
-                                                            {log.notes && <p className="text-[11px] text-white/60 mt-2 bg-black/20 p-2 rounded border border-white/5 italic">"{log.notes}"</p>}
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </div>
-                                        </div>
-
                                     </div>
                                 </div>
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        {/* VIEW: ADD CONTACT */}
-                        {view === 'add' && (
-                            <div className="flex-1 overflow-y-auto p-12 flex items-center justify-center animate-in zoom-in-95 duration-300">
-                                <div className="w-full max-w-xl bg-white/5 border border-white/10 rounded-3xl p-8 shadow-2xl backdrop-blur-xl relative">
-                                    <button onClick={() => setView('dashboard')} className="absolute top-6 right-6 text-white/30 hover:text-white transition-colors">✕</button>
-                                    
-                                    <div className="mb-8 text-center">
-                                        <div className="w-16 h-16 bg-pink-600 rounded-2xl mx-auto flex items-center justify-center text-3xl mb-4 shadow-lg shadow-pink-600/30">+</div>
-                                        <h3 className="text-2xl font-bold text-white">New Connection</h3>
-                                        <p className="text-white/40 text-xs mt-1">Add details to expand your network.</p>
-                                    </div>
-
-                                    <form onSubmit={handleAddContact} className="space-y-5">
-                                        <div className="grid grid-cols-2 gap-5">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold ml-1">Full Name</label>
-                                                <input required type="text" value={newContact.name} onChange={e => setNewContact({...newContact, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:border-pink-500 outline-none text-white text-sm transition-all focus:bg-black/60" placeholder="e.g. Elon Musk" />
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold ml-1">Phone</label>
-                                                <input required type="tel" value={newContact.phone} onChange={e => setNewContact({...newContact, phone: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:border-pink-500 outline-none text-white text-sm transition-all focus:bg-black/60" placeholder="+1..." />
-                                            </div>
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold ml-1">Email</label>
-                                            <input type="email" value={newContact.email} onChange={e => setNewContact({...newContact, email: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:border-pink-500 outline-none text-white text-sm transition-all focus:bg-black/60" placeholder="optional@email.com" />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold ml-1">Tags</label>
-                                            <input type="text" value={newContact.tags} onChange={e => setNewContact({...newContact, tags: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 focus:border-pink-500 outline-none text-white text-sm transition-all focus:bg-black/60" placeholder="Tech, Investor, VIP" />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] text-white/40 uppercase tracking-widest font-bold ml-1">Context</label>
-                                            <textarea value={newContact.notes} onChange={e => setNewContact({...newContact, notes: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 h-24 focus:border-pink-500 outline-none text-white text-sm transition-all focus:bg-black/60 resize-none" placeholder="Context helps AI write better messages..." />
-                                        </div>
-                                        
-                                        <button type="submit" className="w-full py-4 mt-2 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg transition-all transform hover:scale-[1.02]">Create Profile</button>
-                                    </form>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* VIEW: CAMPAIGN SETUP */}
-                        {view === 'campaign' && campaignStep === 'setup' && (
-                            <div className="flex-1 flex flex-col p-10 overflow-y-auto custom-scrollbar animate-in slide-in-from-bottom-4 duration-500">
-                                <div className="max-w-2xl mx-auto w-full">
-                                    <div className="mb-10 text-center">
-                                        <h3 className="text-3xl font-black text-white tracking-tight">Campaign Launcher</h3>
-                                        <p className="text-sm text-white/40 font-medium mt-2">Automate your outreach with AI-generated personalized content.</p>
-                                    </div>
-                                    
-                                    <div className="space-y-8 relative">
-                                        {/* Connecting Line */}
-                                        <div className="absolute left-6 top-10 bottom-10 w-0.5 bg-white/10 -z-10"></div>
-
-                                        {/* Step 1 */}
-                                        <div className="flex gap-6">
-                                            <div className="w-12 h-12 rounded-full bg-[#0a0a0c] border-2 border-pink-500 flex items-center justify-center text-pink-500 font-bold text-lg shrink-0 z-10 shadow-[0_0_15px_rgba(236,72,153,0.3)]">1</div>
-                                            <div className="flex-1 bg-white/5 border border-white/5 rounded-2xl p-6">
-                                                <h4 className="text-sm font-bold text-white uppercase tracking-widest mb-4">Select Channel</h4>
-                                                <div className="grid grid-cols-3 gap-4">
-                                                    {['message', 'call', 'email'].map(mode => (
-                                                        <button
-                                                            key={mode}
-                                                            onClick={() => setCampaignMode(mode as any)}
-                                                            className={`py-4 rounded-xl text-xs font-bold capitalize transition-all border flex flex-col items-center gap-2 ${campaignMode === mode ? 'bg-pink-600 border-pink-500 text-white shadow-lg' : 'bg-black/20 border-white/10 text-white/50 hover:bg-white/5 hover:text-white'}`}
-                                                        >
-                                                            <span className="text-xl">{mode === 'message' ? '💬' : mode === 'call' ? '📞' : '✉️'}</span>
-                                                            {mode === 'message' ? 'WhatsApp' : mode === 'call' ? 'Phone Script' : 'Email'}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Step 2 */}
-                                        <div className="flex gap-6">
-                                            <div className="w-12 h-12 rounded-full bg-[#0a0a0c] border-2 border-purple-500 flex items-center justify-center text-purple-500 font-bold text-lg shrink-0 z-10 shadow-[0_0_15px_rgba(168,85,247,0.3)]">2</div>
-                                            <div className="flex-1 bg-white/5 border border-white/5 rounded-2xl p-6">
-                                                <div className="flex justify-between items-center mb-4">
-                                                    <h4 className="text-sm font-bold text-white uppercase tracking-widest">Select Targets ({selectedContacts.length})</h4>
-                                                    <button onClick={selectAllContacts} className="text-[10px] text-purple-400 font-bold hover:text-white transition-colors uppercase tracking-wider">
-                                                        {selectedContacts.length === contacts.length ? 'Deselect All' : 'Select All'}
-                                                    </button>
-                                                </div>
-                                                <div className="max-h-48 overflow-y-auto bg-black/30 border border-white/10 rounded-xl p-2 space-y-1 custom-scrollbar">
-                                                    {contacts.map(c => (
-                                                        <div 
-                                                            key={c.id} 
-                                                            onClick={() => toggleSelectContact(c.id)}
-                                                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${selectedContacts.includes(c.id) ? 'bg-purple-500/20 border border-purple-500/30' : 'hover:bg-white/5 border border-transparent'}`}
-                                                        >
-                                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedContacts.includes(c.id) ? 'bg-purple-500 border-purple-500' : 'border-white/30'}`}>
-                                                                {selectedContacts.includes(c.id) && <span className="text-[8px]">✓</span>}
-                                                            </div>
-                                                            <span className="text-xs text-white font-medium">{c.name}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Step 3 */}
-                                        <div className="flex gap-6">
-                                            <div className="w-12 h-12 rounded-full bg-[#0a0a0c] border-2 border-blue-500 flex items-center justify-center text-blue-500 font-bold text-lg shrink-0 z-10 shadow-[0_0_15px_rgba(59,130,246,0.3)]">3</div>
-                                            <div className="flex-1 bg-white/5 border border-white/5 rounded-2xl p-6">
-                                                <h4 className="text-sm font-bold text-white uppercase tracking-widest mb-4">Campaign Goal</h4>
-                                                <textarea 
-                                                    value={taskInput}
-                                                    onChange={(e) => setTaskInput(e.target.value)}
-                                                    className="w-full bg-black/30 border border-white/10 rounded-xl p-4 text-sm text-white focus:border-blue-500 outline-none h-28 resize-none transition-all placeholder-white/20"
-                                                    placeholder="E.g., Invite them to the product launch next Friday. Tone should be exclusive and professional."
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <button 
-                                            onClick={handleRunCampaign}
-                                            disabled={isProcessing || !taskInput || selectedContacts.length === 0}
-                                            className="w-full py-5 ml-18 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 rounded-2xl text-white font-bold text-sm shadow-xl shadow-purple-900/40 disabled:opacity-50 transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3"
-                                        >
-                                            {isProcessing ? (
-                                                <>
-                                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                                    <span className="tracking-widest uppercase">Initializing Agents...</span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <span className="text-lg">✨</span> 
-                                                    <span className="tracking-widest uppercase">Generate & Review</span>
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* VIEW: CAMPAIGN REVIEW */}
-                        {view === 'campaign' && campaignStep === 'review' && (
-                            <div className="flex-1 flex flex-col h-full bg-[#050505] animate-in fade-in duration-500">
-                                <div className="p-6 border-b border-white/10 bg-[#0a0a0c] flex justify-between items-center shrink-0">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-xl bg-green-900/20 border border-green-500/30 flex items-center justify-center text-green-400 text-2xl animate-pulse shadow-[0_0_15px_rgba(74,222,128,0.2)]">
-                                            📡
-                                        </div>
-                                        <div>
-                                            <h3 className="text-xl font-bold text-white tracking-widest uppercase">Mission Control</h3>
-                                            <p className="text-xs text-white/40 font-mono mt-1">Ready for execution • {campaignResults.filter(r => r.status === 'completed').length}/{campaignResults.length} Completed</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-3">
-                                        <button 
-                                            onClick={() => { setCampaignStep('setup'); setCampaignResults([]); }}
-                                            className="px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-white/60 hover:text-white transition-colors"
-                                        >
-                                            Abort
-                                        </button>
-                                        <button 
-                                            onClick={runAutoPilot}
-                                            className="px-8 py-2.5 bg-green-600 hover:bg-green-500 rounded-xl text-white font-bold text-xs shadow-lg shadow-green-900/30 flex items-center gap-2 animate-pulse hover:animate-none transition-all hover:scale-105 active:scale-95"
-                                        >
-                                            <span>⚡</span> AUTO-PILOT
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="flex-1 overflow-y-auto p-8 space-y-4 custom-scrollbar bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-green-900/5 via-[#050505] to-[#050505]">
-                                    {campaignResults.map((result, idx) => {
-                                        const contact = contacts.find(c => c.id === result.contactId);
-                                        return (
-                                            <div key={idx} className={`p-5 rounded-2xl border transition-all ${result.status === 'completed' ? 'bg-green-900/10 border-green-500/30 opacity-60' : 'bg-[#0f0f13] border-white/10 hover:border-white/20 hover:bg-[#15151a]'}`}>
-                                                <div className="flex justify-between items-start mb-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`w-2.5 h-2.5 rounded-full ${result.status === 'completed' ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-yellow-500 animate-pulse'}`}></div>
-                                                        <span className="font-bold text-sm text-white uppercase tracking-wide">{contact?.name}</span>
-                                                        <span className="text-[10px] text-white/30 font-mono border border-white/10 px-2 py-0.5 rounded bg-black/40">{campaignMode === 'email' ? contact?.email : contact?.phone}</span>
-                                                    </div>
-                                                    {result.status === 'completed' && <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded font-bold uppercase tracking-wider border border-green-500/20">Transmitted</span>}
-                                                </div>
-                                                <div className="bg-black/50 p-4 rounded-xl mb-4 font-mono text-xs text-white/80 border border-white/5 relative overflow-hidden">
-                                                    <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
-                                                    <p className="whitespace-pre-wrap pl-3 leading-relaxed">{result.content}</p>
-                                                </div>
-                                                {result.status === 'pending' && (
-                                                    <button 
-                                                        onClick={() => executeCampaignAction(idx)}
-                                                        className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl text-xs font-bold text-white transition-all flex items-center justify-center gap-2 active:scale-95 uppercase tracking-wider"
-                                                    >
-                                                        {campaignMode === 'message' ? '💬 Send WhatsApp' : campaignMode === 'email' ? '✉️ Send Email' : '📞 Dial Now'}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* VIEW: HISTORY */}
-                        {view === 'history' && (
-                            <div className="flex-1 flex flex-col p-8 animate-fade-in-up">
-                                <div className="mb-8 flex justify-between items-center">
+                    {/* TAB 2: UNIVERSE (Leads) */}
+                    {activeTab === 'universe' && (
+                        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-12 h-full animate-in fade-in slide-in-from-right-8 duration-700">
+                            
+                            {/* Leads Browser */}
+                            <div className="flex-1 flex flex-col min-h-0">
+                                <div className="flex justify-between items-end mb-10 shrink-0">
                                     <div>
-                                        <h3 className="text-3xl font-bold text-white">Call Logs</h3>
-                                        <p className="text-white/40 text-xs mt-1">Full communication audit trail.</p>
+                                        <h3 className="text-5xl font-black tracking-tighter mb-1">Target Universe</h3>
+                                        <p className="text-[10px] text-blue-500 font-black uppercase tracking-[0.5em]">High Precision Acquisition</p>
                                     </div>
-                                    <div className="flex bg-white/5 rounded-lg p-1">
-                                        {['all', 'incoming', 'outgoing', 'missed'].map(f => (
-                                            <button
-                                                key={f}
-                                                onClick={() => setHistoryFilter(f as any)}
-                                                className={`px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all ${historyFilter === f ? 'bg-white/10 text-white shadow-sm' : 'text-white/40 hover:text-white'}`}
-                                            >
-                                                {f}
-                                            </button>
-                                        ))}
+                                    <div className="flex gap-4">
+                                        <div className="relative group">
+                                            <input 
+                                                type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                                                placeholder="Filter targets..." 
+                                                className="bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm focus:border-blue-500 outline-none w-64 backdrop-blur-xl transition-all" 
+                                            />
+                                            <span className="absolute right-6 top-1/2 -translate-y-1/2 opacity-30">🔍</span>
+                                        </div>
+                                        <button className="px-8 py-4 bg-blue-600 hover:bg-blue-500 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl transition-all active:scale-95">Add Entry</button>
                                     </div>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
-                                    {filteredLogs.length === 0 ? (
-                                        <div className="text-center py-20 text-white/20">
-                                            <div className="text-4xl mb-4 grayscale opacity-20">📜</div>
-                                            <p className="text-sm">No records found.</p>
-                                        </div>
-                                    ) : (
-                                        filteredLogs.sort((a,b) => b.timestamp - a.timestamp).map(log => (
-                                            <div key={log.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all group">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-10 h-10 flex items-center justify-center rounded-xl text-lg shadow-inner ${log.type === 'outgoing' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : log.type === 'missed' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
-                                                        {log.type === 'outgoing' ? '↗' : log.type === 'missed' ? '↙' : '↙'}
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-bold text-sm text-white group-hover:text-pink-300 transition-colors">{log.contactName}</h4>
-                                                        <div className="flex items-center gap-3 mt-1">
-                                                            <span className={`text-[10px] uppercase font-bold tracking-wider ${log.type === 'outgoing' ? 'text-green-500/50' : log.type === 'missed' ? 'text-red-500/50' : 'text-blue-500/50'}`}>{log.type}</span>
-                                                            <span className="text-[10px] text-white/40 font-mono">{new Date(log.timestamp).toLocaleString()}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right flex flex-col items-end gap-1">
-                                                    <span className="text-[10px] font-mono text-white/60 bg-black/20 px-2 py-1 rounded border border-white/5">{log.duration}</span>
-                                                    {log.notes && <span className="text-[9px] text-white/30 italic max-w-[150px] truncate">{log.notes}</span>}
+                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pb-32">
+                                    {filteredLeads.map(lead => (
+                                        <div 
+                                            key={lead.id} onClick={() => setSelectedLead(lead)}
+                                            className={`p-6 rounded-[2.5rem] border flex items-center gap-6 transition-all duration-300 group cursor-pointer relative overflow-hidden ${
+                                                selectedLead?.id === lead.id ? 'bg-blue-600 border-blue-400 shadow-2xl scale-[1.02]' : 'bg-white/5 border-white/5 hover:bg-white/10'
+                                            }`}
+                                        >
+                                            <div className="w-16 h-16 bg-black/40 rounded-2xl flex items-center justify-center text-4xl shadow-inner group-hover:rotate-6 transition-transform">
+                                                {lead.icon}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="text-xl font-black tracking-tight">{lead.name}</div>
+                                                <div className="text-[10px] font-bold text-white/30 uppercase tracking-widest">{lead.company}</div>
+                                            </div>
+                                            <div className="text-right flex flex-col items-end gap-1.5">
+                                                <div className="text-lg font-black text-white">{lead.value}</div>
+                                                <div className={`text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${lead.status === 'Hot' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'}`}>
+                                                    {lead.status}
                                                 </div>
                                             </div>
-                                        ))
-                                    )}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-                        )}
 
-                    </div>
+                            {/* Deep Dossier */}
+                            <div className="w-full lg:w-[450px] shrink-0 sticky top-0 h-full">
+                                {selectedLead ? (
+                                    <div className="bg-black/60 border border-white/10 rounded-[4rem] p-10 h-full flex flex-col shadow-2xl animate-in fade-in zoom-in-95 backdrop-blur-3xl relative overflow-hidden">
+                                        <div className="absolute -top-32 -left-32 w-80 h-80 bg-blue-600/10 rounded-full blur-[120px]"></div>
+                                        
+                                        <div className="text-center mb-10 relative z-10">
+                                            <div className="w-32 h-32 bg-black/60 rounded-[3rem] mx-auto flex items-center justify-center text-6xl shadow-2xl mb-6 border border-white/10 transform hover:scale-105 transition-transform ring-8 ring-blue-600/5">
+                                                {selectedLead.icon}
+                                            </div>
+                                            <h4 className="text-3xl font-black tracking-tighter mb-1">{selectedLead.name}</h4>
+                                            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.4em]">{selectedLead.company}</p>
+                                        </div>
+
+                                        <div className="space-y-6 flex-1 relative z-10 overflow-y-auto no-scrollbar">
+                                            <div className="p-6 bg-white/5 rounded-3xl border border-white/5">
+                                                <div className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> Neural Context
+                                                </div>
+                                                <p className="text-sm text-white/80 leading-relaxed font-medium">
+                                                    "Bhai, ye client Cloud Migration protocols explore kar raha hai. {selectedLead.tag} status validated."
+                                                </p>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                {[
+                                                    { l: 'Current Stage', v: selectedLead.stage, c: 'text-blue-400' },
+                                                    { l: 'Projected Revenue', v: selectedLead.value, c: 'text-emerald-400' },
+                                                    { l: 'Point of Contact', v: selectedLead.email, c: 'text-white/60' },
+                                                    { l: 'Direct Comms', v: selectedLead.phone, c: 'text-white/60' }
+                                                ].map((d, i) => (
+                                                    <div key={i} className="flex justify-between items-center border-b border-white/5 pb-4">
+                                                        <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">{d.l}</span>
+                                                        <span className={`text-xs font-bold ${d.c}`}>{d.v}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 mt-10 relative z-10 shrink-0">
+                                            <button className="py-5 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                                                <span>💬</span> WhatsApp
+                                            </button>
+                                            <button className="py-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-3xl font-black text-[10px] uppercase tracking-widest transition-all">Archive</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-white/5 border border-white/10 border-dashed rounded-[4rem] opacity-30 group hover:opacity-50 transition-all">
+                                        <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center text-4xl mb-6 group-hover:scale-110 transition-transform">👤</div>
+                                        <h4 className="text-xl font-black uppercase tracking-widest">Awaiting Command</h4>
+                                        <p className="text-xs mt-4 font-bold leading-relaxed max-w-xs">Select a target from the universe to initialize deep-scan analysis.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB 3: CAMPAIGNS */}
+                    {activeTab === 'campaigns' && (
+                        <div className="max-w-6xl mx-auto space-y-12 animate-in fade-in slide-in-from-left-8 duration-700 pb-32">
+                            <div className="text-center mb-20">
+                                <h3 className="text-7xl font-black tracking-tighter mb-4 leading-none bg-clip-text text-transparent bg-gradient-to-b from-white to-white/20">Marketing Lab</h3>
+                                <p className="text-[11px] text-blue-500 font-black uppercase tracking-[1em]">Viral Expansion Protocols Active</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {CAMPAIGN_METRICS.map(m => (
+                                    <div key={m.id} className="p-10 bg-white/5 border border-white/5 rounded-[3.5rem] group hover:scale-[1.02] transition-all duration-500 relative overflow-hidden hover:border-white/10 shadow-2xl">
+                                        <div className="flex justify-between items-start mb-10 relative z-10">
+                                            <div className="w-20 h-20 bg-black/40 rounded-[2rem] flex items-center justify-center text-5xl shadow-2xl group-hover:rotate-12 transition-transform border border-white/5">
+                                                {m.icon}
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-1">Global Reach</div>
+                                                <div className="text-4xl font-black tracking-tighter" style={{ color: m.color }}>{m.reach}</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="space-y-6 relative z-10">
+                                            <div>
+                                                <div className="flex justify-between items-end mb-2">
+                                                    <h4 className="text-2xl font-black">{m.label}</h4>
+                                                    <span className="text-xs font-bold" style={{ color: m.color }}>{m.conversion}% Efficiency</span>
+                                                </div>
+                                                <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                                                    <div 
+                                                        className="h-full transition-all duration-[2s] ease-out shadow-[0_0_15px_currentColor]"
+                                                        style={{ width: isLoaded ? `${m.conversion * 2}%` : '0%', backgroundColor: m.color }}
+                                                    ></div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex justify-between items-center border-t border-white/5 pt-6">
+                                                <div className="text-center">
+                                                    <div className="text-[8px] font-black text-white/20 uppercase">ROI Multiplier</div>
+                                                    <div className="text-xl font-black" style={{ color: m.color }}>{m.roi}</div>
+                                                </div>
+                                                <button className="px-8 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all hover:bg-white hover:text-black" style={{ border: `1px solid ${m.color}`, color: m.color }}>Deploy Update</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            {/* Neural Architect Input */}
+                            <div className="p-12 bg-black/60 border border-white/5 rounded-[4rem] shadow-2xl relative overflow-hidden group backdrop-blur-3xl">
+                                <div className="absolute top-10 left-10 flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></div>
+                                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Neural Strategy Generator</span>
+                                </div>
+                                <textarea 
+                                    placeholder="Bhai, explain your target niche. I'll construct a full omni-channel growth strategy for you..."
+                                    className="w-full h-48 bg-transparent outline-none text-2xl font-light leading-relaxed resize-none placeholder-white/5 mt-10"
+                                ></textarea>
+                                <button className="w-full py-8 bg-blue-600 hover:bg-blue-500 rounded-[2.5rem] font-black text-sm uppercase tracking-[0.4em] shadow-2xl shadow-blue-900/40 transition-all flex items-center justify-center gap-4 group">
+                                    <span className="group-hover:rotate-180 transition-transform duration-700 text-2xl">⚙️</span> EXECUTE STRATEGY ENGINE
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                 </div>
             </div>
             
             <style>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(37,99,235,0.2); border-radius: 4px; }
+                .no-scrollbar::-webkit-scrollbar { display: none; }
+                .dash-offset-full { stroke-dashoffset: 2000; }
+                .dash-offset-0 { stroke-dashoffset: 0; }
             `}</style>
         </div>
     );

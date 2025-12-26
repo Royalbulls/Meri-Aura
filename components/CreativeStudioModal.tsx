@@ -1,266 +1,197 @@
 
-import React, { useState, useRef } from 'react';
-import { StudioTool, ComicLayout, ComicGenre, ComicLanguage } from '../types';
+import React, { useState } from 'react';
+import { StudioTool } from '../types';
 import { CREATIVE_TOOLS } from '../constants';
 
 interface CreativeStudioModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onToolSelect: (tool: StudioTool, input: string, imageInput?: string, option?: any) => void;
-    isProcessing: boolean;
-    onOpenLiveScanner?: () => void; // New prop for Live Scanner
+    selectedTool: StudioTool | null;
+    onSelectTool: (tool: StudioTool | null) => void;
+    onExecute: (tool: StudioTool, input: string, image?: string) => void;
 }
 
-export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen, onClose, onToolSelect, isProcessing, onOpenLiveScanner }) => {
-    const [selectedTool, setSelectedTool] = useState<StudioTool | null>(null);
-    const [input, setInput] = useState('');
-    const [activeCategory, setActiveCategory] = useState<string>('all');
-    const [selectedImage, setSelectedImage] = useState<string | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    
-    // Content Options
-    const [comicLayout, setComicLayout] = useState<ComicLayout>('1-panel');
-    const [comicGenre, setComicGenre] = useState<ComicGenre>('superhero');
-    const [language, setLanguage] = useState<string>('English'); // Shared language state
+const CATEGORIES = [
+    { id: 'utility', label: '🛠️ Utility', color: 'blue' },
+    { id: 'creative', label: '🎨 Creative', color: 'pink' },
+    { id: 'coding', label: '💻 Coding', color: 'cyan' },
+    { id: 'astrology', label: '🔮 Astrology', color: 'purple' },
+    { id: 'mode', label: '🕹️ Modes', color: 'yellow' }
+];
+
+export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen, onClose, selectedTool, onSelectTool, onExecute }) => {
+    const [input, setInput] = useState("");
+    const [image, setImage] = useState<string | null>(null);
+    const [activeCat, setActiveCat] = useState('utility');
 
     if (!isOpen) return null;
 
-    const categories = ['all', ...Array.from(new Set(CREATIVE_TOOLS.map(t => t.category)))];
-    const filteredTools = activeCategory === 'all' ? CREATIVE_TOOLS : CREATIVE_TOOLS.filter(t => t.category === activeCategory);
-
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const reader = new FileReader();
-            reader.readAsDataURL(e.target.files[0]);
-            reader.onloadend = () => {
-                setSelectedImage(reader.result as string);
-            };
+    const handleExecute = () => {
+        if (selectedTool) {
+            onExecute(selectedTool, input, image || undefined);
+            setInput("");
+            setImage(null);
+            onClose();
         }
     };
 
-    const handleSubmit = () => {
-        if (!selectedTool) return;
-        
-        let options: any = { language: language }; // Default inject language
-        if (selectedTool.action === 'comic') {
-            options = {
-                ...options,
-                layout: comicLayout,
-                genre: comicGenre,
-                sourcePages: 1,
-                targetPages: 1
-            };
-        }
-
-        onToolSelect(selectedTool, input, selectedImage || undefined, options);
-        onClose();
-        setInput('');
-        setSelectedImage(null);
-        setSelectedTool(null);
-    };
-
-    // LOGIC UPDATE: Distinguish between tools that REQUIRE an image vs SUPPORT an image
-    const requiresImage = ['vastu_scan', 'vision_scan', 'ai_chef', 'edit_image', 'smart_measure'].includes(selectedTool?.action || '');
-    const supportsImage = ['comic'].includes(selectedTool?.action || ''); 
-    const showImageUpload = requiresImage || supportsImage;
-
-    const isLiveCapable = selectedTool?.action === 'smart_measure';
-    const showLanguageSelector = ['comic', 'standup_comedy', 'music_composer'].includes(selectedTool?.action || '');
+    const filteredTools = CREATIVE_TOOLS.filter(t => t.category === activeCat);
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
-            <div className="bg-gray-900 border border-white/10 rounded-3xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
-                <div className="p-6 border-b border-white/10 flex justify-between items-center bg-gray-800/50">
-                    <h2 className="text-xl font-bold text-white">Creative Studio</h2>
-                    <button onClick={onClose} className="text-white/50 hover:text-white">✕</button>
-                </div>
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
+             <div className="bg-[#121212] border border-white/10 rounded-3xl w-full max-w-5xl h-[85vh] flex overflow-hidden shadow-2xl relative">
                 
-                <div className="flex flex-1 overflow-hidden">
-                    {/* Sidebar / Categories */}
-                    <div className="w-48 border-r border-white/10 p-4 bg-black/20 overflow-y-auto hidden md:block">
-                        {categories.map(cat => (
+                {/* Sidebar Navigation */}
+                <div className="w-16 md:w-64 border-r border-white/5 bg-black/40 flex flex-col shrink-0">
+                    <div className="p-4 md:p-6 border-b border-white/5 flex justify-center md:justify-start">
+                        <h2 className="hidden md:block text-lg font-black text-white uppercase tracking-widest">Aura Studio</h2>
+                        <div className="md:hidden text-2xl">🎨</div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+                        {CATEGORIES.map(cat => (
                             <button 
-                                key={cat}
-                                onClick={() => setActiveCategory(cat)}
-                                className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold uppercase mb-2 ${activeCategory === cat ? 'bg-pink-600 text-white' : 'text-white/50 hover:bg-white/5'}`}
+                                key={cat.id}
+                                onClick={() => { setActiveCat(cat.id); if(!selectedTool) onSelectTool(null); }}
+                                className={`w-full text-left p-3 rounded-xl flex items-center justify-center md:justify-start gap-3 transition-all duration-300 ${
+                                    activeCat === cat.id 
+                                    ? `bg-${cat.color}-600/20 text-${cat.color}-400 border border-${cat.color}-600/50` 
+                                    : 'hover:bg-white/5 text-white/40 hover:text-white'
+                                }`}
+                                title={cat.label}
                             >
-                                {cat}
+                                <span className="text-xl md:text-lg">{cat.label.split(' ')[0]}</span>
+                                <span className="hidden md:block text-xs font-bold uppercase tracking-wider">{cat.label.split(' ')[1]}</span>
                             </button>
                         ))}
                     </div>
+                </div>
 
-                    {/* Main Content */}
-                    <div className="flex-1 p-6 overflow-y-auto">
-                        {!selectedTool ? (
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                {filteredTools.map(tool => (
-                                    <button
-                                        key={tool.id}
-                                        onClick={() => setSelectedTool(tool)}
-                                        className="p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 hover:border-pink-500/50 transition-all text-left group"
-                                    >
-                                        <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">{tool.icon}</div>
-                                        <div className="font-bold text-sm text-white">{tool.label}</div>
-                                        <div className="text-xs text-white/40 mt-1">{tool.description}</div>
-                                    </button>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="max-w-xl mx-auto space-y-6">
-                                <button onClick={() => { setSelectedTool(null); setSelectedImage(null); }} className="text-xs text-pink-400 hover:text-pink-300 font-bold mb-4">← Back to Tools</button>
-                                
-                                <div className="flex items-center gap-4 mb-6">
-                                    <div className="text-4xl">{selectedTool.icon}</div>
-                                    <div>
-                                        <h3 className="text-2xl font-bold text-white">{selectedTool.label}</h3>
-                                        <p className="text-white/50">{selectedTool.description}</p>
-                                    </div>
+                {/* Tool Selection Area (Responsive) */}
+                <div className={`flex-col border-r border-white/5 bg-[#161616] ${selectedTool ? 'hidden md:flex md:w-1/3' : 'flex-1 md:w-1/3'}`}>
+                     <div className="p-6 border-b border-white/5 bg-[#1a1a1a]">
+                        <h3 className="text-white/60 font-bold uppercase text-xs tracking-widest flex items-center gap-2">
+                            <span>{CATEGORIES.find(c => c.id === activeCat)?.label.split(' ')[0]}</span>
+                            Experts
+                        </h3>
+                     </div>
+                     <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                        {filteredTools.length > 0 ? filteredTools.map(tool => (
+                            <button 
+                                key={tool.id}
+                                onClick={() => onSelectTool(tool)}
+                                className={`w-full text-left p-4 rounded-xl flex items-center gap-4 transition-all group ${
+                                    selectedTool?.id === tool.id 
+                                    ? 'bg-gradient-to-r from-white/10 to-transparent border-l-4 border-pink-500 text-white shadow-lg' 
+                                    : 'bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border-l-4 border-transparent'
+                                }`}
+                            >
+                                <span className="text-2xl filter drop-shadow-md group-hover:scale-110 transition-transform">{tool.icon}</span>
+                                <div className="min-w-0">
+                                    <div className="text-sm font-bold truncate">{tool.label}</div>
+                                    <div className="text-[10px] opacity-50 truncate w-full md:w-32">{tool.description}</div>
                                 </div>
-
-                                {/* SPECIAL LIVE BUTTON FOR MEASUREMENT */}
-                                {isLiveCapable && onOpenLiveScanner && (
-                                    <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-xl mb-4 text-center">
-                                        <p className="text-xs text-green-300 mb-3">⚡ For instant results, use Live Camera Mode.</p>
-                                        <button 
-                                            onClick={() => {
-                                                onOpenLiveScanner();
-                                                onClose();
-                                            }}
-                                            className="w-full py-4 bg-green-600 hover:bg-green-500 rounded-xl text-white font-bold text-sm shadow-lg flex items-center justify-center gap-2"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 9a3.75 3.75 0 100 7.5A3.75 3.75 0 0012 9z" /><path fillRule="evenodd" d="M9.375 3a1.875 1.875 0 00-1.875 1.875c0 1.035-.84 1.875-1.875 1.875h-3a1.875 1.875 0 00-1.875 1.875v9.75c0 1.036.84 1.875 1.875 1.875h14.25c1.035 0 1.875-.84 1.875-1.875v-9.75a1.875 1.875 0 00-1.875-1.875h-3c-1.035 0-1.875-.84-1.875-1.875A1.875 1.875 0 0014.625 3h-5.25z" clipRule="evenodd" /></svg>
-                                            OPEN LIVE CAMERA SCANNER
-                                        </button>
-                                        <div className="my-3 flex items-center gap-2">
-                                            <div className="h-px bg-white/10 flex-1"></div>
-                                            <span className="text-[10px] text-white/30 uppercase">OR Upload Image</span>
-                                            <div className="h-px bg-white/10 flex-1"></div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* INPUT AREA */}
-                                <div>
-                                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase">
-                                        {selectedTool.action === 'live_vastu' ? 'Notes about your spot (Optional)' : 'Input / Prompt'}
-                                    </label>
-                                    <textarea
-                                        value={input}
-                                        onChange={(e) => setInput(e.target.value)}
-                                        className="w-full h-32 bg-black/40 border border-white/10 rounded-xl p-4 text-white focus:outline-none focus:border-pink-500 transition-colors"
-                                        placeholder={
-                                            selectedTool.action === 'live_vastu' ? "E.g., I am facing North, the entrance is behind me..." :
-                                            selectedTool.action === 'trend_hunter' ? "E.g., Tech trends in India, Viral food spots in Mumbai, or just 'Find Money'..." :
-                                            showImageUpload ? `Describe what you want to analyze or create...` : `Enter details for ${selectedTool.label}...`
-                                        }
-                                    />
-                                </div>
-
-                                {/* IMAGE UPLOAD FOR SUPPORTED TOOLS */}
-                                {showImageUpload && (
-                                    <div>
-                                        <label className="block text-xs font-bold text-white/50 mb-2 uppercase">
-                                            Upload Image {requiresImage ? '(Required)' : '(Optional)'}
-                                        </label>
-                                        <div 
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className={`w-full h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all ${selectedImage ? 'border-green-500 bg-green-900/10' : 'border-white/10 hover:border-white/30 bg-black/20'}`}
-                                        >
-                                            <input 
-                                                type="file" 
-                                                ref={fileInputRef} 
-                                                onChange={handleImageUpload} 
-                                                accept="image/*"
-                                                className="hidden" 
-                                            />
-                                            {selectedImage ? (
-                                                <div className="flex flex-col items-center">
-                                                    <img src={selectedImage} alt="Preview" className="h-20 object-contain mb-2 rounded" />
-                                                    <span className="text-xs text-green-400 font-bold">Image Selected</span>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-center text-white/40">
-                                                    <span className="text-2xl mb-2">📸</span>
-                                                    <span className="text-xs">Click to Upload Photo</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* OPTIONS GRID */}
-                                {(selectedTool.action === 'comic' || showLanguageSelector) && (
-                                    <div className="grid grid-cols-2 gap-4 p-4 bg-white/5 rounded-xl">
-                                         {/* Language Selection */}
-                                         {showLanguageSelector && (
-                                             <div className="col-span-2">
-                                                 <label className="text-[10px] font-bold text-green-500/80 mb-2 block uppercase tracking-wider">Content Language</label>
-                                                 <select
-                                                    value={language}
-                                                    onChange={(e) => setLanguage(e.target.value)}
-                                                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none"
-                                                 >
-                                                     <option value="English">English</option>
-                                                     <option value="Hindi">Hindi</option>
-                                                     <option value="Hinglish">Hinglish</option>
-                                                     <option value="Spanish">Spanish</option>
-                                                     <option value="French">French</option>
-                                                     <option value="German">German</option>
-                                                     <option value="Japanese">Japanese</option>
-                                                 </select>
-                                             </div>
-                                         )}
-
-                                         {/* Comic Specific Options */}
-                                         {selectedTool.action === 'comic' && (
-                                             <>
-                                                 <div>
-                                                     <label className="text-[10px] font-bold text-yellow-500/80 mb-2 block uppercase tracking-wider">Comic Layout</label>
-                                                     <select
-                                                        value={comicLayout}
-                                                        onChange={(e) => setComicLayout(e.target.value as ComicLayout)}
-                                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none"
-                                                     >
-                                                         <option value="1-panel">Single Splash</option>
-                                                         <option value="3-panel-strip">3-Panel Strip</option>
-                                                         <option value="4-panel-grid">4-Panel Grid</option>
-                                                         <option value="manga-page">Manga Page</option>
-                                                     </select>
-                                                 </div>
-
-                                                 <div>
-                                                     <label className="text-[10px] font-bold text-cyan-500/80 mb-2 block uppercase tracking-wider">Genre</label>
-                                                     <select
-                                                        value={comicGenre}
-                                                        onChange={(e) => setComicGenre(e.target.value as ComicGenre)}
-                                                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs focus:outline-none"
-                                                     >
-                                                         <option value="superhero">Superhero</option>
-                                                         <option value="manga">Manga</option>
-                                                         <option value="noir">Noir</option>
-                                                         <option value="retro">Retro</option>
-                                                         <option value="cyberpunk">Cyberpunk</option>
-                                                         <option value="fantasy">Fantasy</option>
-                                                         <option value="comedy">Comedy</option>
-                                                     </select>
-                                                 </div>
-                                             </>
-                                         )}
-                                    </div>
-                                )}
-
-                                <button
-                                    onClick={handleSubmit}
-                                    disabled={(requiresImage && !selectedImage) || isProcessing}
-                                    className="w-full py-4 bg-gradient-to-r from-pink-600 to-purple-600 rounded-xl text-white font-bold text-sm shadow-lg hover:shadow-pink-500/20 transition-all disabled:opacity-50"
-                                >
-                                    {isProcessing ? 'Generating...' : `Run ${selectedTool.label}`}
-                                </button>
+                            </button>
+                        )) : (
+                            <div className="text-center p-8 text-white/20 text-xs uppercase tracking-widest">
+                                No experts found in this category.
                             </div>
                         )}
                     </div>
                 </div>
-            </div>
+
+                {/* Execution / Input Area (Responsive) */}
+                <div className={`flex-col bg-[#0a0a0a] relative p-6 md:p-10 ${selectedTool ? 'flex-1' : 'hidden md:flex md:flex-1'}`}>
+                    <button onClick={onClose} className="absolute top-4 right-4 text-white/30 hover:text-white transition-colors z-10">✕ ESC</button>
+
+                    {selectedTool ? (
+                        <div className="flex-1 flex flex-col gap-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                            {/* Mobile Back Button */}
+                            <button 
+                                onClick={() => onSelectTool(null)} 
+                                className="md:hidden self-start mb-2 text-white/50 hover:text-white flex items-center gap-2 text-xs font-bold uppercase tracking-widest bg-white/5 px-3 py-1.5 rounded-full"
+                            >
+                                ← Back
+                            </button>
+
+                            <div>
+                                <div className="flex items-center gap-4 mb-2">
+                                    <span className="text-4xl">{selectedTool.icon}</span>
+                                    <h2 className="text-2xl md:text-3xl font-black text-white tracking-tight leading-tight">{selectedTool.label}</h2>
+                                </div>
+                                <p className="text-white/60 text-sm leading-relaxed max-w-lg">{selectedTool.description}</p>
+                            </div>
+                            
+                            {/* DYNAMIC INPUT UI */}
+                            <div className="flex-1 flex flex-col gap-4 min-h-0">
+                                <label className="block text-xs font-bold text-pink-500 uppercase tracking-widest mb-1">
+                                    {selectedTool.action === 'live_vastu' ? 'Notes about your spot' : 
+                                     selectedTool.action === 'invoice_editor' ? 'Invoice Instructions' : 
+                                     selectedTool.action === 'anatomy_scan' ? 'Describe Subject' : 'Your Command'}
+                                </label>
+                                
+                                <textarea
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    className="w-full flex-1 bg-white/5 border border-white/10 rounded-2xl p-4 md:p-6 text-white text-base md:text-lg focus:outline-none focus:border-pink-500/50 transition-colors resize-none placeholder-white/20 font-light"
+                                    placeholder={
+                                        selectedTool.action === 'generate_csv' ? "E.g., Create a list of top 10 tech companies with Revenue, CEO, and HQ Location..." :
+                                        selectedTool.action === 'invoice_editor' ? "Enter Invoice Details or upload an image..." :
+                                        `Enter details for ${selectedTool.label}...`
+                                    }
+                                />
+
+                                {/* IMAGE UPLOAD */}
+                                {['invoice_editor', 'vision_scan', 'edit_image', 'anatomy_scan'].includes(selectedTool.action) && (
+                                    <div className="shrink-0 border-2 border-dashed border-white/10 rounded-xl p-4 text-center hover:bg-white/5 transition-colors cursor-pointer relative group h-24 md:h-32 flex flex-col items-center justify-center">
+                                        <input 
+                                            type="file" 
+                                            accept="image/*"
+                                            onChange={(e) => {
+                                                if (e.target.files && e.target.files[0]) {
+                                                    const reader = new FileReader();
+                                                    reader.onload = (ev) => setImage(ev.target?.result as string);
+                                                    reader.readAsDataURL(e.target.files[0]);
+                                                }
+                                            }}
+                                            className="absolute inset-0 opacity-0 cursor-pointer"
+                                        />
+                                        {image ? (
+                                            <div className="relative h-full w-full">
+                                                <img src={image} className="h-full w-full object-contain" alt="Preview" />
+                                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold">Change Image</div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <span className="text-xl md:text-2xl mb-1 opacity-50">📸</span>
+                                                <div className="text-white/40 text-[10px] md:text-xs font-bold uppercase">Upload Source Image</div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <button 
+                                onClick={handleExecute}
+                                className="w-full py-4 md:py-5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 rounded-2xl text-white font-black text-xs md:text-sm uppercase tracking-[0.2em] shadow-lg shadow-purple-900/20 transition-all active:scale-95 flex items-center justify-center gap-3 shrink-0"
+                            >
+                                <span>⚡</span> Run {selectedTool.label} Protocol
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30">
+                            <div className="text-6xl mb-6">🛠️</div>
+                            <h3 className="text-2xl font-bold uppercase tracking-widest">Studio Idle</h3>
+                            <p className="text-sm mt-2">Select an Expert Tool from the list to begin.</p>
+                        </div>
+                    )}
+                </div>
+             </div>
+             <style>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+             `}</style>
         </div>
     );
 };

@@ -1,11 +1,64 @@
 
-export interface Contact {
+export interface BusinessProfile {
     id: string;
     name: string;
+    type: string; // e.g., 'Retail', 'Agency', 'Medical'
+    tagline: string;
+    address: string;
+    themeColor: string; // Tailwind color class e.g., 'blue', 'pink'
+    ownerName: string;
+    services: string[]; // List of services offered (e.g., "Haircut", "Audit", "Repair")
+    contactEmail?: string;
+    contactPhone?: string;
+}
+
+export interface CustomerJourneyPoint {
+    id: string;
+    icon: string; // e.g. "🔍", "📱", "💰"
+    title: string; // e.g. "Scanned QR Code"
+    timestamp: number;
+    details?: string; // e.g. "Summer Flyer Campaign"
+}
+
+export interface Contact {
+    id: string;
+    businessId: string; // Links contact to a specific business
+    type: 'personal' | 'business'; // B2C vs B2B
+    source?: 'offline' | 'social' | 'referral' | 'direct'; // Where did they come from?
+    journey: CustomerJourneyPoint[]; // The tracked history
+    name: string;
+    companyName?: string; // For B2B
+    role?: string; // For B2B
     phone: string;
     email?: string;
     notes: string;
     tags: string[];
+    membershipCardHtml?: string; // HTML code for the generated card
+    businessCardHtml?: string; // HTML code for B2B card
+    joinedDate: number;
+}
+
+export interface MarketingCampaign {
+    id: string;
+    businessId: string;
+    name: string; // e.g. "Summer Flyer"
+    channel: 'offline' | 'social' | 'email'; // Where is this placed?
+    type: 'whatsapp' | 'website' | 'call';
+    target: string; // Phone number or URL
+    triggerMessage?: string; // For WhatsApp (e.g. "I saw the poster")
+    generatedLink: string;
+    qrCodeUrl: string;
+    createdAt: number;
+    scansLogged: number; // Manual counter for tracking
+}
+
+export interface BusinessInsight {
+    sentimentScore: number; // 0 to 100
+    topKeywords: string[];
+    recentReviewsSummary: string;
+    searchIntent: string; // "Looking for discounts", "Emergency service", etc.
+    competitorMove: string;
+    lastUpdated: number;
 }
 
 export interface Persona {
@@ -59,7 +112,10 @@ export type ContentType =
     | 'script' 
     | 'file_attachment' 
     | 'genesis_result'
-    | 'trend_report';
+    | 'trend_report'
+    | 'invoice'
+    | 'membership_card'
+    | 'business_card';
 
 export interface ViralMetadata {
     title: string;
@@ -74,6 +130,7 @@ export interface GenesisStep {
     label: string;
     status: 'pending' | 'processing' | 'completed' | 'failed';
     result?: string;
+    prompt?: string;
 }
 
 export interface Message {
