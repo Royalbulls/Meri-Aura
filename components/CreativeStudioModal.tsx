@@ -12,8 +12,9 @@ interface CreativeStudioModalProps {
 }
 
 const CATEGORIES = [
-    { id: 'utility', label: '🛠️ Utility', color: 'blue' },
     { id: 'creative', label: '🎨 Creative', color: 'pink' },
+    { id: 'utility', label: '🛠️ Utility', color: 'blue' },
+    { id: 'business', label: '💼 Business', color: 'emerald' },
     { id: 'coding', label: '💻 Coding', color: 'cyan' },
     { id: 'astrology', label: '🔮 Astrology', color: 'purple' },
     { id: 'mode', label: '🕹️ Modes', color: 'yellow' }
@@ -22,7 +23,7 @@ const CATEGORIES = [
 export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen, onClose, selectedTool, onSelectTool, onExecute }) => {
     const [input, setInput] = useState("");
     const [image, setImage] = useState<string | null>(null);
-    const [activeCat, setActiveCat] = useState('utility');
+    const [activeCat, setActiveCat] = useState('creative');
 
     if (!isOpen) return null;
 
@@ -55,7 +56,7 @@ export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen
                                 onClick={() => { setActiveCat(cat.id); if(!selectedTool) onSelectTool(null); }}
                                 className={`w-full text-left p-3 rounded-xl flex items-center justify-center md:justify-start gap-3 transition-all duration-300 ${
                                     activeCat === cat.id 
-                                    ? `bg-${cat.color}-600/20 text-${cat.color}-400 border border-${cat.color}-600/50` 
+                                    ? `bg-white/10 text-white border border-white/20` 
                                     : 'hover:bg-white/5 text-white/40 hover:text-white'
                                 }`}
                                 title={cat.label}
@@ -125,24 +126,18 @@ export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen
                             {/* DYNAMIC INPUT UI */}
                             <div className="flex-1 flex flex-col gap-4 min-h-0">
                                 <label className="block text-xs font-bold text-pink-500 uppercase tracking-widest mb-1">
-                                    {selectedTool.action === 'live_vastu' ? 'Notes about your spot' : 
-                                     selectedTool.action === 'invoice_editor' ? 'Invoice Instructions' : 
-                                     selectedTool.action === 'anatomy_scan' ? 'Describe Subject' : 'Your Command'}
+                                    Your Command for {selectedTool.label}
                                 </label>
                                 
                                 <textarea
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
                                     className="w-full flex-1 bg-white/5 border border-white/10 rounded-2xl p-4 md:p-6 text-white text-base md:text-lg focus:outline-none focus:border-pink-500/50 transition-colors resize-none placeholder-white/20 font-light"
-                                    placeholder={
-                                        selectedTool.action === 'generate_csv' ? "E.g., Create a list of top 10 tech companies with Revenue, CEO, and HQ Location..." :
-                                        selectedTool.action === 'invoice_editor' ? "Enter Invoice Details or upload an image..." :
-                                        `Enter details for ${selectedTool.label}...`
-                                    }
+                                    placeholder={`Bhai, what should I do with ${selectedTool.label}? Enter details here...`}
                                 />
 
                                 {/* IMAGE UPLOAD */}
-                                {['invoice_editor', 'vision_scan', 'edit_image', 'anatomy_scan'].includes(selectedTool.action) && (
+                                {['vision_scan', 'image_gen', 'logo_designer', 'invoice_gen'].includes(selectedTool.action) && (
                                     <div className="shrink-0 border-2 border-dashed border-white/10 rounded-xl p-4 text-center hover:bg-white/5 transition-colors cursor-pointer relative group h-24 md:h-32 flex flex-col items-center justify-center">
                                         <input 
                                             type="file" 
@@ -164,7 +159,7 @@ export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen
                                         ) : (
                                             <>
                                                 <span className="text-xl md:text-2xl mb-1 opacity-50">📸</span>
-                                                <div className="text-white/40 text-[10px] md:text-xs font-bold uppercase">Upload Source Image</div>
+                                                <div className="text-white/40 text-[10px] md:text-xs font-bold uppercase">Upload Source Image (Optional)</div>
                                             </>
                                         )}
                                     </div>
@@ -182,7 +177,7 @@ export const CreativeStudioModal: React.FC<CreativeStudioModalProps> = ({ isOpen
                         <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30">
                             <div className="text-6xl mb-6">🛠️</div>
                             <h3 className="text-2xl font-bold uppercase tracking-widest">Studio Idle</h3>
-                            <p className="text-sm mt-2">Select an Expert Tool from the list to begin.</p>
+                            <p className="text-sm mt-2">Select an Expert Tool from the categories on the left.</p>
                         </div>
                     )}
                 </div>

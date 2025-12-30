@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Persona } from '../types';
+import { Persona, Contact, CustomerJourneyPoint } from '../types';
 
 interface AuraConnectProps {
     isOpen: boolean;
@@ -8,12 +8,103 @@ interface AuraConnectProps {
     currentPersona: Persona;
 }
 
-const MOCK_LEADS = [
-    { id: '1', name: 'Rajesh Malhotra', company: 'Malhotra FinTech', value: '$12,500', status: 'Hot', stage: 'Negotiation', tag: 'High ROI', icon: '👤', lastContact: '2h ago', email: 'rajesh@fintech.in', phone: '+91 98765 43210' },
-    { id: '2', name: 'Priya Sharma', company: 'Sharma Logistics', value: '$8,200', status: 'Nurture', stage: 'Proposal', tag: 'Enterprise', icon: '👩‍💼', lastContact: '1d ago', email: 'priya@sharma.log', phone: '+91 98234 56789' },
-    { id: '3', name: 'Vikram Singh', company: 'Singh Automotive', value: '$25,000', status: 'Hot', stage: 'Closing', tag: 'Strategic', icon: '👨‍🔧', lastContact: '5m ago', email: 'vikram@singh.auto', phone: '+91 91234 56789' },
-    { id: '4', name: 'Anjali Desai', company: 'Desai Retail', value: '$4,100', status: 'Cold', stage: 'Lead', tag: 'Small Biz', icon: '👩‍🎨', lastContact: '3d ago', email: 'anjali@desai.shop', phone: '+91 99887 76655' },
-    { id: '5', name: 'Siddharth Mehra', company: 'Mehra Energy', value: '$11,000', status: 'Hot', stage: 'Qualification', tag: 'Cloud Mig', icon: '👨‍💼', lastContact: '1h ago', email: 'sid@mehra.energy', phone: '+91 97766 55443' },
+// Enhanced mock leads with journey history, tags and notes
+const MOCK_LEADS: any[] = [
+    { 
+        id: '1', 
+        name: 'Rajesh Malhotra', 
+        company: 'Malhotra FinTech', 
+        value: '$12,500', 
+        status: 'Hot', 
+        stage: 'Negotiation', 
+        tag: 'High ROI', 
+        icon: '👤', 
+        lastContact: '2h ago', 
+        email: 'rajesh@fintech.in', 
+        phone: '+91 98765 43210',
+        notes: "Interested in large-scale cloud infrastructure overhaul. Looking for a partner who understands the Indian regulatory landscape for FinTech. Very aggressive timeline for Q3 deployment.",
+        tags: ["FinTech", "Cloud Infra", "Decision Maker", "Enterprise"],
+        journey: [
+            { id: 'j1', icon: '🔍', title: 'Initial Query', timestamp: Date.now() - 86400000 * 5, details: 'Inquiry via website about Cloud Spanner integration.' },
+            { id: 'j2', icon: '📱', title: 'WhatsApp Discovery', timestamp: Date.now() - 86400000 * 3, details: 'Deep dive call regarding data residency requirements.' },
+            { id: 'j3', icon: '🤝', title: 'Proposal Sent', timestamp: Date.now() - 86400000, details: 'Sent v1 architecture proposal and ROI breakdown.' }
+        ]
+    },
+    { 
+        id: '2', 
+        name: 'Priya Sharma', 
+        company: 'Sharma Logistics', 
+        value: '$8,200', 
+        status: 'Nurture', 
+        stage: 'Proposal', 
+        tag: 'Enterprise', 
+        icon: '👩‍💼', 
+        lastContact: '1d ago', 
+        email: 'priya@sharma.log', 
+        phone: '+91 98234 56789',
+        notes: "Currently evaluating multiple vendors. Primary pain point is real-time tracking across 12 states. Tech-savvy but budget-conscious.",
+        tags: ["Logistics", "Cold Chain", "Optimization", "Mid-Market"],
+        journey: [
+            { id: 'j4', icon: '📸', title: 'Event Lead', timestamp: Date.now() - 86400000 * 10, details: 'Met at the Logistics 4.0 Expo in Pune.' },
+            { id: 'j5', icon: '📧', title: 'Email Thread', timestamp: Date.now() - 86400000 * 7, details: 'Followed up with whitepaper on IoT tracking.' }
+        ]
+    },
+    { 
+        id: '3', 
+        name: 'Vikram Singh', 
+        company: 'Singh Automotive', 
+        value: '$25,000', 
+        status: 'Hot', 
+        stage: 'Closing', 
+        tag: 'Strategic', 
+        icon: '👨‍🔧', 
+        lastContact: '5m ago', 
+        email: 'vikram@singh.auto', 
+        phone: '+91 91234 56789',
+        notes: "VIP Client. High priority for AI-driven inventory management. Has already approved the technical pilot phase. Closing meeting scheduled for Friday.",
+        tags: ["Automotive", "AI-Core", "Strategic Partner", "Billionaire Circle"],
+        journey: [
+            { id: 'j6', icon: '🤝', title: 'Introduction', timestamp: Date.now() - 86400000 * 30, details: 'Direct referral from Royal Bulls network.' },
+            { id: 'j7', icon: '⚡', title: 'Pilot Started', timestamp: Date.now() - 86400000 * 15, details: 'Deployed edge-node AI prototype at main warehouse.' },
+            { id: 'j8', icon: '💰', title: 'PO Drafted', timestamp: Date.now() - 86400000 * 2, details: 'Draft Purchase Order received for enterprise license.' }
+        ]
+    },
+    { 
+        id: '4', 
+        name: 'Anjali Desai', 
+        company: 'Desai Retail', 
+        value: '$4,100', 
+        status: 'Cold', 
+        stage: 'Lead', 
+        tag: 'Small Biz', 
+        icon: '👩‍🎨', 
+        lastContact: '3d ago', 
+        email: 'anjali@desai.shop', 
+        phone: '+91 99887 76655',
+        notes: "Small retail chain owner. Looking for basic POS modernization. Currently on hold due to festival season rush.",
+        tags: ["Retail", "SME", "POS", "Price Sensitive"],
+        journey: [
+            { id: 'j9', icon: '🌐', title: 'Organic Search', timestamp: Date.now() - 86400000 * 4, details: 'Found Aura via "AI for small shops" search.' }
+        ]
+    },
+    { 
+        id: '5', 
+        name: 'Siddharth Mehra', 
+        company: 'Mehra Energy', 
+        value: '$11,000', 
+        status: 'Hot', 
+        stage: 'Qualification', 
+        tag: 'Cloud Mig', 
+        icon: '👨‍💼', 
+        lastContact: '1h ago', 
+        email: 'sid@mehra.energy', 
+        phone: '+91 97766 55443',
+        notes: "Energy sector veteran. Interested in predictive maintenance for solar farms. Highly interested in our Vertex AI capability.",
+        tags: ["Energy", "Solar", "Predictive", "Tech-First"],
+        journey: [
+            { id: 'j10', icon: '📄', title: 'Case Study Download', timestamp: Date.now() - 86400000 * 2, details: 'Downloaded the "AI in Renewables" case study.' }
+        ]
+    },
 ];
 
 const CAMPAIGN_METRICS = [
@@ -134,7 +225,7 @@ export const AuraConnect: React.FC<AuraConnectProps> = ({ isOpen, onClose, curre
                             <div className="absolute top-0 right-0 p-4 opacity-10 text-4xl">💡</div>
                             <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Bestie Tip</p>
                             <p className="text-[11px] text-white/60 italic leading-relaxed">
-                                "Bhai, Vikram Singh ki deal 90% closing stage par hai. Ek follow-up aur, and target achieved! 🔥"
+                                {selectedLead ? `"Bhai, ${selectedLead.name} ki journey dekh rahe ho? Ek extra nudge de do and closure done!"` : `"Bhai, Vikram Singh ki deal 90% closing stage par hai. Ek follow-up aur, and target achieved! 🔥"`}
                             </p>
                         </div>
                     </div>
@@ -319,50 +410,86 @@ export const AuraConnect: React.FC<AuraConnectProps> = ({ isOpen, onClose, curre
                                 </div>
                             </div>
 
-                            {/* Deep Dossier */}
+                            {/* --- DEEP DOSSIER (DETAILED VIEW) --- */}
                             <div className="w-full lg:w-[450px] shrink-0 sticky top-0 h-full">
                                 {selectedLead ? (
-                                    <div className="bg-black/60 border border-white/10 rounded-[4rem] p-10 h-full flex flex-col shadow-2xl animate-in fade-in zoom-in-95 backdrop-blur-3xl relative overflow-hidden">
+                                    <div className="bg-black/60 border border-white/10 rounded-[4rem] p-8 h-full flex flex-col shadow-2xl animate-in fade-in zoom-in-95 backdrop-blur-3xl relative overflow-hidden">
                                         <div className="absolute -top-32 -left-32 w-80 h-80 bg-blue-600/10 rounded-full blur-[120px]"></div>
                                         
-                                        <div className="text-center mb-10 relative z-10">
-                                            <div className="w-32 h-32 bg-black/60 rounded-[3rem] mx-auto flex items-center justify-center text-6xl shadow-2xl mb-6 border border-white/10 transform hover:scale-105 transition-transform ring-8 ring-blue-600/5">
+                                        <div className="text-center mb-8 relative z-10 shrink-0">
+                                            <div className="w-24 h-24 bg-black/60 rounded-[2rem] mx-auto flex items-center justify-center text-5xl shadow-2xl mb-4 border border-white/10 transform hover:scale-105 transition-transform ring-4 ring-blue-600/5">
                                                 {selectedLead.icon}
                                             </div>
-                                            <h4 className="text-3xl font-black tracking-tighter mb-1">{selectedLead.name}</h4>
+                                            <h4 className="text-2xl font-black tracking-tighter mb-1">{selectedLead.name}</h4>
                                             <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.4em]">{selectedLead.company}</p>
                                         </div>
 
-                                        <div className="space-y-6 flex-1 relative z-10 overflow-y-auto no-scrollbar">
-                                            <div className="p-6 bg-white/5 rounded-3xl border border-white/5">
-                                                <div className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> Neural Context
+                                        <div className="space-y-6 flex-1 relative z-10 overflow-y-auto custom-scrollbar pr-2 pb-10">
+                                            
+                                            {/* 1. NEURAL TAGS */}
+                                            <div>
+                                                <div className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-3">Neural Matrix Tags</div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {(selectedLead.tags || [selectedLead.tag]).map((t: string, i: number) => (
+                                                        <span key={i} className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[9px] font-bold text-white/70 tracking-wide">
+                                                            #{t.toUpperCase()}
+                                                        </span>
+                                                    ))}
                                                 </div>
-                                                <p className="text-sm text-white/80 leading-relaxed font-medium">
-                                                    "Bhai, ye client Cloud Migration protocols explore kar raha hai. {selectedLead.tag} status validated."
+                                            </div>
+
+                                            {/* 2. STRATEGIC NOTES */}
+                                            <div className="p-5 bg-white/5 rounded-3xl border border-white/5">
+                                                <div className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Intelligence Memo
+                                                </div>
+                                                <p className="text-xs text-white/80 leading-relaxed font-medium">
+                                                    {selectedLead.notes || `"Bhai, ye client Cloud Migration protocols explore kar raha hai. ${selectedLead.tag} status validated."`}
                                                 </p>
                                             </div>
 
+                                            {/* 3. KEY METRICS */}
                                             <div className="space-y-4">
                                                 {[
-                                                    { l: 'Current Stage', v: selectedLead.stage, c: 'text-blue-400' },
-                                                    { l: 'Projected Revenue', v: selectedLead.value, c: 'text-emerald-400' },
+                                                    { l: 'Pipeline Stage', v: selectedLead.stage, c: 'text-blue-400' },
+                                                    { l: 'Est. Valuation', v: selectedLead.value, c: 'text-emerald-400' },
                                                     { l: 'Point of Contact', v: selectedLead.email, c: 'text-white/60' },
                                                     { l: 'Direct Comms', v: selectedLead.phone, c: 'text-white/60' }
                                                 ].map((d, i) => (
-                                                    <div key={i} className="flex justify-between items-center border-b border-white/5 pb-4">
-                                                        <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">{d.l}</span>
-                                                        <span className={`text-xs font-bold ${d.c}`}>{d.v}</span>
+                                                    <div key={i} className="flex justify-between items-center border-b border-white/5 pb-3">
+                                                        <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">{d.l}</span>
+                                                        <span className={`text-[10px] font-bold ${d.c}`}>{d.v}</span>
                                                     </div>
                                                 ))}
                                             </div>
+
+                                            {/* 4. ENGAGEMENT JOURNEY (HISTORY) */}
+                                            <div>
+                                                <div className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-4">Engagement Journey</div>
+                                                <div className="space-y-4 pl-4 border-l border-white/10">
+                                                    {(selectedLead.journey || []).map((step: any, i: number) => (
+                                                        <div key={i} className="relative group/step">
+                                                            <div className="absolute -left-[21px] top-0 w-2.5 h-2.5 rounded-full bg-blue-600 border border-black shadow-[0_0_10px_rgba(37,99,235,0.5)]"></div>
+                                                            <div className="flex items-center gap-3 mb-1">
+                                                                <span className="text-sm">{step.icon}</span>
+                                                                <span className="text-[10px] font-black text-white/90 uppercase tracking-wider">{step.title}</span>
+                                                                <span className="text-[8px] text-white/20 ml-auto">{new Date(step.timestamp).toLocaleDateString()}</span>
+                                                            </div>
+                                                            <p className="text-[10px] text-white/40 leading-relaxed group-hover/step:text-white/60 transition-colors">{step.details}</p>
+                                                        </div>
+                                                    ))}
+                                                    {(!selectedLead.journey || selectedLead.journey.length === 0) && (
+                                                        <p className="text-[9px] text-white/20 italic">No historical events recorded.</p>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4 mt-10 relative z-10 shrink-0">
-                                            <button className="py-5 bg-emerald-600 hover:bg-emerald-500 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                                        <div className="grid grid-cols-2 gap-4 mt-auto relative z-10 shrink-0 pt-4 border-t border-white/5">
+                                            <button className="py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-black text-[9px] uppercase tracking-widest shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
                                                 <span>💬</span> WhatsApp
                                             </button>
-                                            <button className="py-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-3xl font-black text-[10px] uppercase tracking-widest transition-all">Archive</button>
+                                            <button className="py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all">Archive</button>
                                         </div>
                                     </div>
                                 ) : (
