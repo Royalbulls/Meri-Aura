@@ -1,64 +1,74 @@
 
+export interface Project {
+    id: string;
+    name: string;
+    description: string;
+    code: string;
+    author: string;
+    timestamp: number;
+    category: string;
+    thumbnail?: string;
+}
+
+export interface CampusStat {
+    id: string;
+    label: string;
+    value: string;
+    trend: string;
+    color: string;
+}
+
 export interface BusinessProfile {
     id: string;
     name: string;
-    type: string; // e.g., 'Retail', 'Agency', 'Medical'
+    type: string; 
     tagline: string;
     address: string;
-    themeColor: string; // Tailwind color class e.g., 'blue', 'pink'
+    themeColor: string; 
     ownerName: string;
-    services: string[]; // List of services offered (e.g., "Haircut", "Audit", "Repair")
+    services: string[]; 
     contactEmail?: string;
     contactPhone?: string;
 }
 
 export interface CustomerJourneyPoint {
     id: string;
-    icon: string; // e.g. "🔍", "📱", "💰"
-    title: string; // e.g. "Scanned QR Code"
+    icon: string; 
+    title: string; 
     timestamp: number;
-    details?: string; // e.g. "Summer Flyer Campaign"
+    details?: string; 
 }
 
 export interface Contact {
     id: string;
-    businessId: string; // Links contact to a specific business
-    type: 'personal' | 'business'; // B2C vs B2B
-    source?: 'offline' | 'social' | 'referral' | 'direct'; // Where did they come from?
-    journey: CustomerJourneyPoint[]; // The tracked history
+    businessId: string; 
+    type: 'personal' | 'business'; 
+    source?: 'offline' | 'social' | 'referral' | 'direct'; 
+    journey: CustomerJourneyPoint[]; 
     name: string;
-    companyName?: string; // For B2B
-    role?: string; // For B2B
+    companyName?: string; 
+    role?: string; 
     phone: string;
     email?: string;
     notes: string;
     tags: string[];
-    membershipCardHtml?: string; // HTML code for the generated card
-    businessCardHtml?: string; // HTML code for B2B card
+    membershipCardHtml?: string; 
+    businessCardHtml?: string; 
     joinedDate: number;
 }
 
 export interface MarketingCampaign {
     id: string;
     businessId: string;
-    name: string; // e.g. "Summer Flyer"
-    channel: 'offline' | 'social' | 'email'; // Where is this placed?
+    name: string; 
+    channel: 'offline' | 'social' | 'email'; 
     type: 'whatsapp' | 'website' | 'call';
-    target: string; // Phone number or URL
-    triggerMessage?: string; // For WhatsApp (e.g. "I saw the poster")
+    target: string; 
+    triggerMessage?: string; 
     generatedLink: string;
     qrCodeUrl: string;
     createdAt: number;
-    scansLogged: number; // Manual counter for tracking
-}
-
-export interface BusinessInsight {
-    sentimentScore: number; // 0 to 100
-    topKeywords: string[];
-    recentReviewsSummary: string;
-    searchIntent: string; // "Looking for discounts", "Emergency service", etc.
-    competitorMove: string;
-    lastUpdated: number;
+    scansLogged: number; 
 }
 
 export interface Persona {
@@ -84,11 +94,6 @@ export interface StudioTool {
     action: string;
 }
 
-export interface VideoStyle {
-    id: string;
-    label: string;
-}
-
 export enum Sender {
     User = 'user',
     Bot = 'bot'
@@ -101,28 +106,8 @@ export type ContentType =
     | 'comic' 
     | 'patrika' 
     | 'horoscope' 
-    | 'kundli_milan' 
-    | 'numerology' 
-    | 'blog' 
-    | 'earth' 
-    | 'music_visual' 
-    | 'spreadsheet' 
-    | 'document' 
-    | 'viral_post' 
-    | 'script' 
-    | 'file_attachment' 
     | 'genesis_result'
-    | 'trend_report'
-    | 'invoice'
-    | 'membership_card'
-    | 'business_card';
-
-export interface ViralMetadata {
-    title: string;
-    hashtags: string[];
-    initialViews?: number;
-    comments: Array<{ user: string; text: string }>;
-}
+    | 'trend_report';
 
 export interface GenesisStep {
     id: string;
@@ -139,17 +124,10 @@ export interface Message {
     sender: Sender;
     timestamp: Date;
     contentType?: ContentType;
-    attachmentUrl?: string;
-    videoUrl?: string;
-    audioUrl?: string; // Added for Viral Video (Audio track)
     codeSnippet?: string;
     groundingMetadata?: any;
-    directionsUrl?: string;
-    viralMetadata?: ViralMetadata;
     genesisSteps?: GenesisStep[];
-    fileName?: string;
-    earthLocation?: any;
-    feedback?: 'positive' | 'negative';
+    feedback?: 'like' | 'dislike' | null;
 }
 
 export interface NeuralContext {
@@ -199,22 +177,18 @@ export interface StoredFile {
     type: string;
     data: string;
     timestamp: number;
+    isPublic?: boolean;
+    isEncrypted?: boolean;
 }
-
-export interface BrowserState {
-    isOpen: boolean;
-    url: string;
-    advice: string;
-    isLoadingAdvice: boolean;
-}
-
-export type ComicLayout = '1-panel' | '3-panel-strip' | '4-panel-grid' | 'manga-page';
-export type ComicGenre = 'superhero' | 'manga' | 'noir' | 'retro' | 'cyberpunk' | 'fantasy' | 'comedy';
-export type ComicLanguage = 'english' | 'hindi' | 'hinglish' | 'japanese' | 'spanish';
 
 export interface MemoryVector {
     id: string;
     text: string;
     vector: number[];
     timestamp: number;
+}
+
+export interface VideoStyle {
+    id: string;
+    label: string;
 }

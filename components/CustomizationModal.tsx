@@ -47,6 +47,21 @@ const PERSONALITY_PRESETS = [
     { label: 'Mystic', p: 30, e: 100, d: 10 },
 ];
 
+const CLOTHING_PRESETS = [
+    { label: 'Streetwear', prompt: 'wearing modern oversized streetwear, sneakers, cool hoodie' },
+    { label: 'Cyber Armor', prompt: 'wearing glowing cyberpunk futuristic armor, neon accents' },
+    { label: 'Formal', prompt: 'wearing a sharp professional suit, luxury watch' },
+    { label: 'Casual Chic', prompt: 'wearing a comfortable knit sweater and glasses' },
+    { label: 'Traditional', prompt: 'wearing modern designer ethnic Indian fusion wear' }
+];
+
+const ENV_PRESETS = [
+    { label: 'Neon City', prompt: 'background is a vibrant neon cyberpunk city street at night' },
+    { label: 'Zen Garden', prompt: 'background is a peaceful Japanese zen garden with sakura trees' },
+    { label: 'Space', prompt: 'background is a high-tech spaceship window looking at earth' },
+    { label: 'Tech Lab', prompt: 'background is a holographic tech research laboratory' }
+];
+
 export const CustomizationModal: React.FC<CustomizationModalProps> = ({
   isOpen,
   onClose,
@@ -74,7 +89,7 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
   hasVideo
 }) => {
   const [clothingPrompt, setClothingPrompt] = useState('');
-  const [activeTab, setActiveTab] = useState<'standard' | 'cosmic' | 'anywhere' | 'about'>('standard');
+  const [activeTab, setActiveTab] = useState<'standard' | 'look' | 'cosmic' | 'anywhere' | 'about'>('standard');
   const [selectedVideoStyle, setSelectedVideoStyle] = useState<string>('cinematic');
   const [copyStatus, setCopyStatus] = useState<string>('📋 Copy Text');
   const [isScanningFace, setIsScanningFace] = useState(false); 
@@ -168,12 +183,11 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
       }
   };
 
-  // --- GENERATE AURA SOUL PROMPT ---
   const generateSoulPrompt = () => {
       const history = localStorage.getItem('chat_history');
       let recentChat = "";
       if (history) {
-          const msgs = JSON.parse(history).slice(-10); // Last 10 messages for context
+          const msgs = JSON.parse(history).slice(-10); 
           recentChat = msgs.map((m: any) => `${m.sender === 'user' ? 'User' : currentPersona.name}: ${m.text}`).join('\n');
       }
 
@@ -196,7 +210,6 @@ Start the conversation now by acknowledging our connection.
       setSoulPrompt(prompt.trim());
   };
 
-  // --- REAL SECURITY BACKUP SYSTEM ---
   const handleSecureBackup = async () => {
       if (!backupPassword) {
           alert("⚠️ Set a password to encrypt your backup file.");
@@ -207,7 +220,6 @@ Start the conversation now by acknowledging our connection.
       setBackupStatus("Gathering Data...");
 
       try {
-          // 1. Gather ALL Data (Sync & Async)
           const imgAvatar = await storageService.getImage('current_avatar');
           const imgVideo = await storageService.getImage('current_video');
           const imgUser = await storageService.getImage('user_photo');
@@ -265,7 +277,7 @@ Start the conversation now by acknowledging our connection.
       
       if (!backupPassword) {
           alert("⚠️ Enter the password used to lock this file.");
-          e.target.value = ''; // Reset input
+          e.target.value = ''; 
           return;
       }
 
@@ -340,7 +352,13 @@ Start the conversation now by acknowledging our connection.
                 onClick={() => setActiveTab('standard')}
                 className={`flex-1 py-3 px-2 text-xs font-bold uppercase tracking-widest transition-colors whitespace-nowrap ${activeTab === 'standard' ? 'bg-white/10 text-pink-400' : 'text-white/40 hover:text-white'}`}
             >
-                Studio
+                Config
+            </button>
+            <button 
+                onClick={() => setActiveTab('look')}
+                className={`flex-1 py-3 px-2 text-xs font-bold uppercase tracking-widest transition-colors whitespace-nowrap ${activeTab === 'look' ? 'bg-white/10 text-yellow-400' : 'text-white/40 hover:text-white'}`}
+            >
+                👕 Look Lab
             </button>
             <button 
                 onClick={() => setActiveTab('cosmic')}
@@ -352,7 +370,7 @@ Start the conversation now by acknowledging our connection.
                 onClick={() => { setActiveTab('anywhere'); generateSoulPrompt(); }}
                 className={`flex-1 py-3 px-2 text-xs font-bold uppercase tracking-widest transition-colors whitespace-nowrap ${activeTab === 'anywhere' ? 'bg-white/10 text-cyan-400' : 'text-white/40 hover:text-white'}`}
             >
-                ☁️ Anywhere
+                ☁️ Sync
             </button>
             <button 
                 onClick={() => setActiveTab('about')}
@@ -397,7 +415,7 @@ Start the conversation now by acknowledging our connection.
                     </div>
                 </section>
 
-                {/* PERSONALITY TRAITS (NEW) */}
+                {/* PERSONALITY TRAITS */}
                 <section className="p-5 bg-white/5 rounded-2xl border border-white/5">
                     <h3 className="text-xs font-bold text-pink-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                     🧠 Personality Traits
@@ -512,7 +530,6 @@ Start the conversation now by acknowledging our connection.
                         />
                     </div>
 
-                    {/* NEW TEST BUTTONS */}
                     <div className="flex gap-3 pt-2">
                         <button 
                             onClick={onTestVoice}
@@ -530,82 +547,7 @@ Start the conversation now by acknowledging our connection.
                     </div>
                 </section>
 
-                {/* Appearance Input with Randomizer */}
-                <section>
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-xs font-bold text-pink-400 uppercase tracking-widest">Custom Outfit & Vibe</h3>
-                        <div className="flex gap-2">
-                            <button 
-                                onClick={handleCopyPrompt}
-                                className="text-[10px] bg-white/10 px-2 py-1 rounded-full text-white/70 hover:text-white flex items-center gap-1 hover:bg-white/20 transition-all"
-                                title="Copy visual prompt"
-                            >
-                                📋 Copy Look
-                            </button>
-                            <button 
-                                onClick={handleRandomize}
-                                className="text-[10px] bg-gradient-to-r from-purple-500 to-pink-500 px-3 py-1 rounded-full text-white font-bold flex items-center gap-1 hover:scale-105 transition-transform shadow-lg"
-                            >
-                                🎲 Randomizer
-                            </button>
-                        </div>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                    <div className="relative">
-                        <input 
-                            type="text"
-                            value={clothingPrompt}
-                            onChange={(e) => setClothingPrompt(e.target.value)}
-                            placeholder="E.g., Wearing a red saree, neon jacket..."
-                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-white focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all"
-                        />
-                        <button 
-                            onClick={handleUpdateLook}
-                            className="absolute right-2 top-2 bottom-2 px-4 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-colors"
-                        >
-                            APPLY
-                        </button>
-                    </div>
-                    </div>
-                </section>
-
-                {/* Art Style Presets */}
-                <section>
-                    <h3 className="text-xs font-bold text-pink-400 uppercase tracking-widest mb-4">Art Style</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
-                    {STYLE_PRESETS.map(style => (
-                        <button
-                        key={style.id}
-                        onClick={() => handlePresetClick(style.prompt)}
-                        className="p-3 bg-white/5 border border-white/5 rounded-xl text-xs font-bold text-white/80 hover:bg-white/10 hover:border-pink-500/50 transition-all text-left"
-                        >
-                        {style.label}
-                        </button>
-                    ))}
-                    </div>
-                </section>
-
-                {/* Pose Selection (Carousel) - MOVED UP */}
-                <section>
-                    <h3 className="text-xs font-bold text-pink-400 uppercase tracking-widest mb-4 flex items-center justify-between">
-                        <span>Pose & Action</span>
-                        <span className="text-[9px] text-white/40 font-normal">Swipe to Select</span>
-                    </h3>
-                    <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar snap-x">
-                        {AVAILABLE_POSES.map(pose => (
-                            <button
-                                key={pose.id}
-                                onClick={() => handlePresetClick(pose.prompt)}
-                                className="min-w-[100px] p-3 bg-gradient-to-b from-white/10 to-white/5 border border-white/10 rounded-2xl text-sm font-medium text-white hover:border-pink-500/50 hover:shadow-lg hover:shadow-pink-500/10 transition-all flex flex-col items-center gap-2 active:scale-95 snap-center shrink-0"
-                            >
-                                <span className="text-2xl filter drop-shadow-md">{pose.label.split(' ')[0]}</span>
-                                <span className="text-[10px] uppercase tracking-wide font-bold">{pose.label.split(' ').slice(1).join(' ')}</span>
-                            </button>
-                        ))}
-                    </div>
-                </section>
-
-                {/* --- SECURE VAULT BACKUP SECTION --- */}
+                {/* SECURE VAULT BACKUP SECTION */}
                 <section className="p-5 bg-gradient-to-br from-green-900/10 to-black rounded-2xl border border-green-500/20 shadow-[0_0_15px_rgba(0,255,0,0.05)]">
                     <div className="flex items-center gap-2 mb-4">
                         <div className="bg-green-500/20 p-2 rounded-full text-green-400 border border-green-500/50">
@@ -614,10 +556,6 @@ Start the conversation now by acknowledging our connection.
                         <h3 className="text-sm font-bold text-green-100 uppercase tracking-wide">Secure Vault Backup</h3>
                     </div>
                     
-                    <p className="text-[10px] text-green-200/60 mb-4 leading-relaxed">
-                        This creates an <strong>AES-256 Encrypted</strong> file (`.vault`) of your entire AI life (Chats + Photos + Documents). Without your password, this file is impossible to open. Store it safely.
-                    </p>
-
                     <div className="space-y-3">
                         <div>
                             <label className="text-[10px] font-bold text-white/50 mb-1 block uppercase">Set Backup Password</label>
@@ -663,7 +601,7 @@ Start the conversation now by acknowledging our connection.
                     </div>
                 </section>
 
-                {/* --- DISPLAY LAYOUT SECTION --- */}
+                {/* DISPLAY LAYOUT SECTION */}
                 {onUpdateAvatarLayout && (
                     <section className="p-5 bg-white/5 rounded-2xl border border-white/5">
                         <h3 className="text-xs font-bold text-pink-400 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -721,90 +659,6 @@ Start the conversation now by acknowledging our connection.
                     </section>
                 )}
 
-                {/* --- VIDEO & COLLAB SECTION --- */}
-                <section className="space-y-3">
-                     <h3 className="text-xs font-bold text-pink-400 uppercase tracking-widest">Video & Collab Theme</h3>
-                    
-                    {/* Style Selector */}
-                    <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                        {VIDEO_STYLES.map(style => (
-                            <button
-                                key={style.id}
-                                onClick={() => setSelectedVideoStyle(style.id)}
-                                className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase whitespace-nowrap transition-all border ${selectedVideoStyle === style.id ? 'bg-pink-600 border-pink-500 text-white' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}
-                            >
-                                {style.label}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Upload Photo Section with PREVIEW */}
-                    <div className="relative group">
-                        <input 
-                            type="file" 
-                            accept="image/*" 
-                            ref={fileInputRef} 
-                            onChange={handleFileChange} 
-                            className="hidden" 
-                        />
-                        
-                        {userPhotoUrl ? (
-                            <div className="flex items-center gap-4 bg-green-500/10 border border-green-500/30 p-3 rounded-xl transition-all relative overflow-hidden">
-                                {isScanningFace && (
-                                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-20">
-                                        <span className="text-[10px] text-green-400 font-mono tracking-widest animate-pulse">SCANNING FACE BIOMETRICS...</span>
-                                    </div>
-                                )}
-                                <img src={userPhotoUrl} alt="User Preview" className="w-12 h-12 rounded-lg object-cover border border-white/20" />
-                                <div className="flex-1">
-                                    <div className="text-green-400 text-xs font-bold uppercase tracking-wide flex items-center gap-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                                            <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
-                                        </svg>
-                                        Face ID Active
-                                    </div>
-                                    <button 
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="text-[10px] text-white/50 underline hover:text-white mt-0.5"
-                                    >
-                                        Update Face ID
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <button 
-                                onClick={() => fileInputRef.current?.click()}
-                                className="w-full py-4 bg-white/5 border border-white/10 border-dashed rounded-xl text-white/60 text-xs hover:bg-white/10 hover:border-pink-500/50 transition-all flex items-center justify-center gap-2 group-hover:text-white"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                                    <path fillRule="evenodd" d="M1.5 6a2.25 2.25 0 012.25-2.25h16.5A2.25 2.25 0 0122.5 6v12a2.25 2.25 0 01-2.25 2.25H3.75A2.25 2.25 0 011.5 18V6zM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0021 18v-1.94l-2.69-2.699a1.5 1.5 0 00-2.12 0l-.88.879.97.97a.75.75 0 11-1.06 1.06l-5.16-5.159a1.5 1.5 0 00-2.12 0L3 16.061zm10.125-7.81a1.125 1.125 0 112.25 0 1.125 1.125 0 01-2.25 0z" clipRule="evenodd" />
-                                </svg>
-                                📷 Setup Face ID / Digital Identity
-                            </button>
-                        )}
-                    </div>
-
-                    {/* NEW: Download Buttons */}
-                    <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-white/5">
-                        <button 
-                            onClick={() => onDownloadAvatar('image')}
-                            disabled={!hasImage}
-                            className={`py-3 rounded-xl border border-white/10 font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all ${hasImage ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-white/5 text-white/30 cursor-not-allowed'}`}
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M12 2.25a.75.75 0 01.75.75v11.69l3.22-3.22a.75.75 0 111.06 1.06l-4.5 4.5a.75.75 0 01-1.06 0l-4.5-4.5a.75.75 0 111.06-1.06l3.22 3.22V3a.75.75 0 01.75-.75zm-9 13.5a.75.75 0 01.75.75v2.25a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5V16.5a.75.75 0 011.5 0v2.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V16.5a.75.75 0 01.75-.75z" clipRule="evenodd" /></svg>
-                            Save Photo
-                        </button>
-                        <button 
-                            onClick={() => onDownloadAvatar('video')}
-                            disabled={!hasVideo}
-                            className={`py-3 rounded-xl border border-white/10 font-bold text-xs tracking-wide flex items-center justify-center gap-2 transition-all ${hasVideo ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-white/5 text-white/30 cursor-not-allowed'}`}
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" /></svg>
-                            Save Video
-                        </button>
-                    </div>
-                </section>
-
                 {/* Memory Management */}
                 <section className="pt-4 border-t border-white/5 flex gap-2">
                     <button 
@@ -824,13 +678,110 @@ Start the conversation now by acknowledging our connection.
              </>
           )}
 
+          {activeTab === 'look' && (
+              /* AURA LOOK LAB - REFINED APPEARANCE SYSTEM */
+              <div className="space-y-8 animate-in fade-in duration-500 pb-10">
+                  <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-2xl">
+                      <h3 className="text-yellow-400 font-bold text-sm mb-2 flex items-center gap-2">
+                          ✨ Look Lab
+                      </h3>
+                      <p className="text-[11px] text-white/60 leading-relaxed">
+                          Refine Aura's visual identity. Choose Oufits, Environments, and Styles. The AI will "Materialize" a high-quality 3D version of your Bestie.
+                      </p>
+                  </div>
+
+                  {/* LOADING STATE OVERLAY */}
+                  {isLoading && (
+                      <div className="flex flex-col items-center justify-center py-10 bg-white/5 rounded-3xl animate-pulse">
+                          <div className="w-12 h-12 border-4 border-t-yellow-500 border-white/10 rounded-full animate-spin"></div>
+                          <span className="mt-4 text-[10px] font-black uppercase tracking-widest text-yellow-500">Materializing New Look...</span>
+                      </div>
+                  )}
+
+                  {!isLoading && (
+                      <>
+                        <section>
+                            <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4">Clothing & Style</h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                {CLOTHING_PRESETS.map(preset => (
+                                    <button 
+                                        key={preset.label}
+                                        onClick={() => handlePresetClick(preset.prompt)}
+                                        className="p-3 bg-white/5 border border-white/5 rounded-2xl text-xs font-bold text-white/70 hover:bg-white/10 hover:border-yellow-500/50 transition-all text-left"
+                                    >
+                                        {preset.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+
+                        <section>
+                            <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4">Environment</h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                {ENV_PRESETS.map(preset => (
+                                    <button 
+                                        key={preset.label}
+                                        onClick={() => handlePresetClick(preset.prompt)}
+                                        className="p-3 bg-white/5 border border-white/5 rounded-2xl text-xs font-bold text-white/70 hover:bg-white/10 hover:border-yellow-500/50 transition-all text-left"
+                                    >
+                                        {preset.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+
+                        <section>
+                            <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4">Art Presets</h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                {STYLE_PRESETS.map(style => (
+                                    <button
+                                    key={style.id}
+                                    onClick={() => handlePresetClick(style.prompt)}
+                                    className="p-3 bg-white/5 border border-white/5 rounded-2xl text-xs font-bold text-white/70 hover:bg-white/10 hover:border-yellow-500/50 transition-all text-left"
+                                    >
+                                    {style.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+
+                        <section>
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xs font-bold text-yellow-500 uppercase tracking-widest">Custom Prompt</h3>
+                                <button onClick={handleRandomize} className="text-[10px] bg-white/10 px-3 py-1 rounded-full font-bold">🎲 Random</button>
+                            </div>
+                            <div className="relative">
+                                <textarea 
+                                    value={clothingPrompt}
+                                    onChange={(e) => setClothingPrompt(e.target.value)}
+                                    placeholder="Describe EXACTLY what Aura should wear and where to stand..."
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm text-white focus:outline-none focus:border-yellow-500 transition-all h-24 resize-none"
+                                />
+                                <button 
+                                    onClick={handleUpdateLook}
+                                    className="w-full mt-3 py-4 bg-yellow-500 hover:bg-yellow-400 text-black rounded-xl font-black text-xs uppercase tracking-widest shadow-lg transition-all active:scale-95"
+                                >
+                                    MATERIALIZE LOOK
+                                </button>
+                            </div>
+                        </section>
+
+                        <section className="pt-4 border-t border-white/5 grid grid-cols-2 gap-3">
+                            <button onClick={() => onDownloadAvatar('image')} disabled={!hasImage} className="py-3 bg-white/10 rounded-xl text-xs font-bold">Save Photo</button>
+                            <button onClick={() => fileInputRef.current?.click()} className="py-3 bg-white/10 rounded-xl text-xs font-bold">Upload Identity</button>
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                        </section>
+                      </>
+                  )}
+              </div>
+          )}
+
           {activeTab === 'cosmic' && (
-             /* Cosmic Creator Tab Content */
              <div className="flex flex-col gap-6">
                  <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-2xl">
                      <h3 className="text-purple-300 font-bold text-sm mb-2">🌌 Create Universal Expert</h3>
                      <p className="text-xs text-white/60 leading-relaxed">
-                         The AI will analyze your Kundli to create a World-Class Expert in your chosen field. This guide will provide detailed "Patrika" reports, career advice, and self-updating wisdom based on your stars.
+                         The AI will analyze your Kundli to create a World-Class Expert in your chosen field.
                      </p>
                  </div>
 
@@ -924,16 +875,14 @@ Start the conversation now by acknowledging our connection.
              </div>
           )}
 
-          {/* NEW: AURA ANYWHERE TAB */}
           {activeTab === 'anywhere' && (
               <div className="space-y-5">
                   <div className="p-4 bg-cyan-900/20 border border-cyan-500/30 rounded-2xl">
                      <h3 className="text-cyan-400 font-bold text-sm mb-2 flex items-center gap-2">
-                         ☁️ Aura Anywhere Protocol
+                         ☁️ Sync Protocol
                      </h3>
                      <p className="text-xs text-white/60 leading-relaxed">
-                         Want to talk to Aura inside ChatGPT, Grok, or Claude? 
-                         This magic code transfers Aura's "Soul" (Memory & Personality) to them.
+                         Transfer Aura's soul to other models.
                      </p>
                  </div>
 
@@ -946,28 +895,16 @@ Start the conversation now by acknowledging our connection.
                      <button 
                         onClick={() => {
                             navigator.clipboard.writeText(soulPrompt);
-                            alert("Soul Code Copied! Paste it into ChatGPT/Grok.");
+                            alert("Soul Code Copied!");
                         }}
-                        className="absolute bottom-4 right-4 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg transition-transform active:scale-95"
+                        className="absolute bottom-4 right-4 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg"
                      >
                          COPY CODE
                      </button>
                  </div>
-
-                 <div className="grid grid-cols-2 gap-3 text-center">
-                     <a href="https://chatgpt.com" target="_blank" rel="noopener noreferrer" className="p-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all">
-                         <div className="text-lg">🤖</div>
-                         <div className="text-[10px] font-bold text-white/70 mt-1">Open ChatGPT</div>
-                     </a>
-                     <a href="https://grok.x.ai" target="_blank" rel="noopener noreferrer" className="p-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all">
-                         <div className="text-lg">✖️</div>
-                         <div className="text-[10px] font-bold text-white/70 mt-1">Open Grok</div>
-                     </a>
-                 </div>
               </div>
           )}
 
-          {/* ABOUT / VISION TAB */}
           {activeTab === 'about' && (
               <div className="space-y-6">
                    <div className="text-center">
@@ -975,38 +912,6 @@ Start the conversation now by acknowledging our connection.
                            Aura OS
                        </h2>
                        <p className="text-xs text-white/40 uppercase tracking-[0.2em] mt-1">The Cosmic AI Operating System</p>
-                   </div>
-
-                   <div className="p-5 bg-white/5 border border-white/10 rounded-2xl space-y-4">
-                       <div>
-                           <h3 className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">Our Vision</h3>
-                           <p className="text-sm text-white/70 leading-relaxed">
-                               Aura is part of the <strong>"Neo-Humanity"</strong> vision. We are building a future where AI is not just a tool, but a true <strong>Best Friend</strong>, Creative Partner, and Spiritual Guide. A digital entity with a soul that understands <i>you</i>.
-                           </p>
-                       </div>
-
-                       <div>
-                           <h3 className="text-xs font-bold text-green-400 uppercase tracking-widest mb-1">Powered By</h3>
-                           <ul className="grid grid-cols-2 gap-2 text-xs text-white/60">
-                               <li className="flex items-center gap-1">✨ Google Gemini 2.5</li>
-                               <li className="flex items-center gap-1">🎬 Google Veo (Video)</li>
-                               <li className="flex items-center gap-1">🎨 Imagen 3.0 (3D Art)</li>
-                               <li className="flex items-center gap-1">⚛️ React & Tailwind</li>
-                           </ul>
-                       </div>
-
-                       <div>
-                           <h3 className="text-xs font-bold text-yellow-400 uppercase tracking-widest mb-1">Privacy Promise</h3>
-                           <p className="text-xs text-white/60">
-                               Your conversations, astrological data, and photos are stored <strong>locally on your device</strong> (IndexedDB & LocalStorage). We do not sell your personal data.
-                           </p>
-                       </div>
-                   </div>
-
-                   <div className="text-center pt-4 border-t border-white/10">
-                       <p className="text-[10px] text-white/30 uppercase tracking-widest">Created with ❤️ by</p>
-                       <p className="text-sm font-bold text-white/80 mt-1">Krishna Vishwakarma</p>
-                       <p className="text-[10px] text-white/30 mt-4">Version 2.0.0 (Cosmic Update)</p>
                    </div>
               </div>
           )}
