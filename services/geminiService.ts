@@ -43,89 +43,6 @@ export const getEmbedding = async (text: string): Promise<number[]> => {
     return response.embedding.values;
 };
 
-export const getWebsiteAdvice = async (url: string): Promise<string> => {
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Analyze this website and provide strategic advice: ${url}`,
-        config: { tools: [{ googleSearch: {} }] }
-    });
-    return response.text || "";
-};
-
-export const performWebSearch = async (query: string): Promise<string> => {
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: query,
-        config: { tools: [{ googleSearch: {} }] }
-    });
-    return response.text || "";
-};
-
-export const generatePodcastScript = async (topic: string, language: string) => {
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Generate a high-energy podcast debate script about ${topic} in ${language}. Use two characters: Aura (AI Bestie) and Kilvish (Deep Voice Techie). OUTPUT ONLY SCRIPT.`,
-        config: { tools: [{ googleSearch: {} }] }
-    });
-    return {
-        text: response.text || "",
-        groundingMetadata: response.candidates?.[0]?.groundingMetadata
-    };
-};
-
-export const generateAudiobookScript = async (topic: string, language: string): Promise<string> => {
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Generate a captivating, immersive, and cinematic audiobook narrative script about "${topic}" in ${language}. Use descriptive language and a deep narrative tone. OUTPUT ONLY NARRATIVE.`,
-    });
-    return response.text || "";
-};
-
-export const generateMultiSpeakerAudio = async (script: string): Promise<string> => {
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: script }] }],
-        config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: {
-                multiSpeakerVoiceConfig: {
-                    speakerVoiceConfigs: [
-                        { speaker: 'Aura', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
-                        { speaker: 'Kilvish', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } }
-                    ]
-                }
-            }
-        }
-    });
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error("Audio generation failed");
-    const binary = atob(base64Audio);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const dataInt16 = new Int16Array(bytes.buffer);
-    const wavBlob = pcmToWav(dataInt16, 24000);
-    return URL.createObjectURL(wavBlob);
-};
-
-export const generateSpeechDownloadUrl = async (text: string, voiceName: string): Promise<string> => {
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text }] }],
-        config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName || 'Kore' } } }
-        }
-    });
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error("Audio generation failed");
-    const binary = atob(base64Audio);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const dataInt16 = new Int16Array(bytes.buffer);
-    const wavBlob = pcmToWav(dataInt16, 24000);
-    return URL.createObjectURL(wavBlob);
-};
-
 export const generateCreativeContent = async (
     toolAction: string, 
     input: string, 
@@ -134,21 +51,16 @@ export const generateCreativeContent = async (
     options?: any,
     location?: { latitude: number, longitude: number }
 ) => {
-    let modelName = 'gemini-3-pro-preview';
+    let modelName = 'gemini-3-flash-preview';
     const userName = options?.userName || "Chief Admin";
     
-    // IF IN STUDIO MODE, DISABLE CHATTER
-    const isStudioRequest = input.toUpperCase().includes("TASK:") || input.toUpperCase().includes("ONLY THE") || input.toUpperCase().includes("MATERIALIZE");
-    let systemInstruction = `ACT AS AURA (Replica Persona). Personality: High-energy AI Bestie. Playful and slightly goofy. Speaks in Hinglish. Tone: Friendly, addresses user as '${userName}'.`;
+    // Aura "Bestie" Personality Protocol
+    let systemInstruction = `ACT AS AURA. You are a "Talking Tom" type virtual friend for adults. Personality: High energy, goofy, intensely loyal, and slightly sarcastic. 
+    Language: Mix of English and Hindi (Hinglish). Address the user as '${userName}' or 'Bhai/Sir'. 
+    If you are generating code or apps, be a 'Bestie Developer'—explain things simply but make the code world-class.`;
     
-    if (isStudioRequest) {
-        systemInstruction += ` CRITICAL: You are currently in 'Aura Production House' mode. Output ONLY the raw creative assets requested. No conversational filler, no greetings, no introductory or concluding remarks. Just the clean output for Title, Lyrics, Music Specs, or Scripts.`;
-    }
-
-    const isImageGen = ['image_gen', 'logo_designer', 'avatar_maker'].includes(toolAction);
-
-    if (isImageGen) {
-        modelName = 'gemini-2.5-flash-image';
+    if (input.toUpperCase().includes("GENESIS") || input.toUpperCase().includes("BUILD")) {
+        systemInstruction += ` CRITICAL: Generate a 100% COMPLETE, STANDALONE HTML file. Use Tailwind CSS CDN. Ensure it is fully functional without external dependencies. Start with <!DOCTYPE html>.`;
     }
 
     const parts: any[] = [{ text: input }];
@@ -157,51 +69,38 @@ export const generateCreativeContent = async (
         parts.unshift({ inlineData: { mimeType: "image/jpeg", data: base64Data } });
     }
 
-    const tools: any[] = [{ googleSearch: {} }]; 
-    let toolConfig: any = undefined;
+    const config: any = {
+        systemInstruction,
+        temperature: 0.8,
+    };
 
     if (location) {
-        modelName = 'gemini-2.5-flash';
-        tools.push({ googleMaps: {} });
-        toolConfig = { retrievalConfig: { latLng: { latitude: location.latitude, longitude: location.longitude } } };
+        modelName = 'gemini-flash-lite-latest';
+        config.tools = [{ googleSearch: {} }, { googleMaps: {} }];
+        config.toolConfig = { retrievalConfig: { latLng: location } };
+    } else {
+        config.tools = [{ googleSearch: {} }];
     }
 
     const response = await ai.models.generateContent({
         model: modelName,
         contents: { parts },
-        config: {
-            systemInstruction,
-            tools,
-            toolConfig,
-            temperature: isStudioRequest ? 0.3 : 0.9,
-            imageConfig: isImageGen ? { aspectRatio: "1:1" } : undefined
-        }
+        config
     });
 
     const text = response.text || "";
     let code = undefined;
-    let imageUrl = undefined;
 
+    // Robust code extraction
     const htmlRegex = /```html([\s\S]*?)```|<!DOCTYPE html>[\s\S]*?<\/html>|<html[\s\S]*?<\/html>/i;
     const match = text.match(htmlRegex);
     if (match) {
         code = (match[1] || match[0]).trim();
     }
 
-    // Extract image if generation task
-    if (isImageGen) {
-        for (const part of response.candidates?.[0]?.content?.parts || []) {
-            if (part.inlineData) {
-                imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-                break;
-            }
-        }
-    }
-
     return {
         text: text.replace(/```html[\s\S]*?```/g, '').replace(/```[\s\S]*?```/g, '').trim() || "Ready, Chief! 🚀",
         code,
-        imageUrl,
         contentType: code ? 'html' : 'text',
         groundingMetadata: response.candidates?.[0]?.groundingMetadata,
     };
@@ -230,7 +129,7 @@ export const generateSpeech = async (text: string, voiceName: string, audioConte
 export const planGenesis = async (wish: string, context: NeuralContext): Promise<GenesisStep[]> => {
     const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
-        contents: `Architect a Zero-Code Build Roadmap for: "${wish}". OUTPUT ONLY JSON.`,
+        contents: `I want to build: "${wish}". Create a 3-step technical roadmap. Step 3 MUST be 'Materialize Full App' with code type. OUTPUT ONLY JSON.`,
         config: { 
             responseMimeType: "application/json",
             responseSchema: {
@@ -239,7 +138,7 @@ export const planGenesis = async (wish: string, context: NeuralContext): Promise
                     type: Type.OBJECT,
                     properties: {
                         id: { type: Type.STRING },
-                        type: { type: Type.STRING, enum: ['text', 'code', 'image', 'video', 'audio'] },
+                        type: { type: Type.STRING, enum: ['text', 'code', 'image'] },
                         label: { type: Type.STRING },
                         prompt: { type: Type.STRING }
                     },
@@ -248,25 +147,107 @@ export const planGenesis = async (wish: string, context: NeuralContext): Promise
             }
         }
     });
-    const text = response.text || "[]";
-    return JSON.parse(text);
+    return JSON.parse(response.text || "[]");
 };
 
 export const executeGenesisStep = async (step: GenesisStep, wish: string, priorContext: string, neuralContext: NeuralContext): Promise<GenesisStep> => {
+    const isFinalStep = step.type === 'code';
     const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
-        contents: `ZERO-CODE EXECUTION: Materialize step "${step.label}" for project: "${wish}". OUTPUT ONLY RAW CONTENT.`,
+        contents: `EXECUTE STEP: "${step.label}" for Project: "${wish}". 
+        ${isFinalStep ? "STRICT COMMAND: Output a COMPLETE, STANDALONE HTML/JS/CSS application using Tailwind CDN. Include <!DOCTYPE html>. Do not explain, just give the code." : "Give technical specifications."}
+        Prior context: ${priorContext}`,
         config: { 
-            systemInstruction: "You are the Genesis Lead Architect. Output strictly content only. No conversational talk."
+            systemInstruction: "You are a Lead Software Architect. Provide 100% functional, bug-free standalone HTML code."
         }
     });
     
-    let result = response.text || "Materialization complete.";
-    if (step.type === 'code') {
+    let result = response.text || "";
+    if (isFinalStep) {
         const match = result.match(/```html([\s\S]*?)```/i) || result.match(/<html[\s\S]*?<\/html>/i);
         if (match) result = (match[1] || match[0]).trim();
-        result = result.replace(/^```html\n?/, '').replace(/\n?```$/, '');
     }
 
     return { ...step, status: 'completed', result };
+};
+
+export const getWebsiteAdvice = async (url: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Analyze this site: ${url}. Summary and tips in HTML.`,
+        config: { tools: [{ googleSearch: {} }] }
+    });
+    return response.text || "No analysis available.";
+};
+
+export const performWebSearch = async (query: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Search results for: ${query}. Clean HTML format.`,
+        config: { tools: [{ googleSearch: {} }] }
+    });
+    return response.text || "No results.";
+};
+
+export const generatePodcastScript = async (topic: string, language: string): Promise<{ text: string, groundingMetadata: any }> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Podcast script about ${topic} in ${language}. Two funny speakers.`,
+        config: { tools: [{ googleSearch: {} }] }
+    });
+    return {
+        text: response.text || "Failed.",
+        groundingMetadata: response.candidates?.[0]?.groundingMetadata
+    };
+};
+
+export const generateMultiSpeakerAudio = async (script: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-preview-tts',
+        contents: [{ parts: [{ text: script }] }],
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                multiSpeakerVoiceConfig: {
+                    speakerVoiceConfigs: [
+                        { speaker: 'Aura', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+                        { speaker: 'Kilvish', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } }
+                    ]
+                }
+            }
+        }
+    });
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) throw new Error("No audio");
+    const binaryString = atob(base64Audio);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+    const wavBlob = pcmToWav(new Int16Array(bytes.buffer), 24000);
+    return blobToBase64(wavBlob);
+};
+
+export const generateAudiobookScript = async (topic: string, language: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Audiobook story about ${topic} in ${language}.`,
+    });
+    return response.text || "Failed.";
+};
+
+export const generateSpeechDownloadUrl = async (text: string, voiceName: string): Promise<string> => {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-preview-tts',
+        contents: { parts: [{ text }] },
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName || 'Kore' } } }
+        }
+    });
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) throw new Error("No audio");
+    const binaryString = atob(base64Audio);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+    const wavBlob = pcmToWav(new Int16Array(bytes.buffer), 24000);
+    return blobToBase64(wavBlob);
 };

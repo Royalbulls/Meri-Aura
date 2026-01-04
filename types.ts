@@ -1,4 +1,20 @@
 
+export interface ToonPanel {
+    id: string;
+    imageUrl: string;
+    narration: string;
+    speechBubble?: string;
+    actionEffect?: string; // e.g. "POW!", "ZAP!", "BOOM!"
+}
+
+export interface ToonStory {
+    id: string;
+    title: string;
+    panels: ToonPanel[];
+    summary: string;
+    category: string;
+}
+
 export interface Project {
     id: string;
     name: string;

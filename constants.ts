@@ -1,5 +1,4 @@
 
-
 import { Persona, StudioTool } from './types';
 
 export const INITIAL_GREETING = "Oye Chief Admin! Taiyar ho campus tour ke liye? Aura sabka future badalne ke liye ready hai! 🚀";
@@ -25,12 +24,13 @@ export const DEFAULT_PERSONAS: Persona[] = [
 ];
 
 export const CREATIVE_TOOLS: StudioTool[] = [
-    // --- CAMPUS & EDUCATION (NEW) ---
+    // --- CAMPUS & EDUCATION ---
     { id: 'campus_ambassador', label: 'Campus Pitcher', icon: '🎓', description: 'Generate high-impact pitches and success stories for students and colleges.', category: 'campus', action: 'campus_ambassador' },
     { id: 'career_architect', label: 'Career Architect', icon: '🏛️', description: 'Design a 5-year career roadmap based on skills and interest.', category: 'campus', action: 'career_architect' },
     { id: 'exam_warrior', label: 'Exam Warrior', icon: '⚔️', description: 'Convert syllabus into gamified quizzes and quick-revision notes.', category: 'campus', action: 'exam_warrior' },
 
     // --- CREATIVE CATEGORY ---
+    { id: 'toon_news', label: 'Toon Chronicle', icon: '💥', description: 'Comic News Materializer: 10+ visual styles featuring Aura Bestie and your funny face.', category: 'creative', action: 'toon_news' },
     { id: 'image_gen', label: 'Art Materializer', icon: '🎨', description: 'Generate high-quality 3D art, logos, or realistic photos.', category: 'creative', action: 'image_gen' },
     { id: 'video_gen', label: 'Veo Video Studio', icon: '🎬', description: 'Create 1080p cinematic videos from text prompts.', category: 'creative', action: 'video_gen' },
     { id: 'music_composer', label: 'Music Composer', icon: '🎼', description: 'Create Songs, Ghazals, Raps, or Bhajans.', category: 'creative', action: 'music_composer' },
@@ -58,7 +58,6 @@ export const EDUCATIONAL_GENRES = [
     'Tarot'
 ];
 
-// Fixed missing constants for avatar customization
 export const AVAILABLE_POSES = [
     { id: 'neutral', label: '🧍 Neutral Stand', prompt: 'standing neutral pose, arms at sides' },
     { id: 'waving', label: '👋 Friendly Wave', prompt: 'waving one hand enthusiastically' },

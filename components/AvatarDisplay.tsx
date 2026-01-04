@@ -20,17 +20,23 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
     onInteraction
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [tapEffect, setTapEffect] = useState<{ x: number, y: number } | null>(null);
   
-  // Audio level normalized for Talking Tom style jitters
   const normalizedLevel = audioLevel > 5 ? (audioLevel / 100) : 0;
   const jitter = normalizedLevel > 0.5 ? Math.random() * 2 - 1 : 0;
-  const bounce = avatarState.isTalking ? Math.sin(Date.now() / 100) * 2 : 0;
+  const bounce = avatarState.isTalking ? Math.sin(Date.now() / 80) * 3 : 0;
 
   useEffect(() => {
     if (avatarState.videoUrl && videoRef.current) {
         videoRef.current.play().catch(e => console.log("Auto-play prevented", e));
     }
   }, [avatarState.videoUrl]);
+
+  const handleTouch = (part: 'head' | 'belly' | 'feet', e: React.MouseEvent) => {
+      setTapEffect({ x: e.clientX, y: e.clientY });
+      setTimeout(() => setTapEffect(null), 500);
+      onInteraction?.(part);
+  };
 
   const getAuraStyle = () => {
     if (isListening) {
@@ -69,12 +75,20 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
         {/* Glow Layer */}
         <div className="absolute inset-0 z-0 transition-all duration-700 ease-out" style={getAuraStyle()}></div>
 
+        {/* Tap Feedback */}
+        {tapEffect && (
+            <div 
+                className="absolute z-50 w-20 h-20 bg-white/20 rounded-full blur-xl animate-ping pointer-events-none"
+                style={{ left: tapEffect.x - 40, top: tapEffect.y - 40 }}
+            />
+        )}
+
         {/* Character Layer */}
         <div 
             className="relative z-10 w-full h-full flex items-end justify-center transition-all duration-300 ease-out"
             style={{ 
                 transform: `translate(${layout.x + jitter}%, ${layout.y + bounce}%) scale(${layout.scale + (normalizedLevel * 0.05)})`,
-                filter: normalizedLevel > 1 ? 'brightness(1.2)' : 'none'
+                filter: normalizedLevel > 1 ? 'brightness(1.2) contrast(1.1)' : 'none'
             }}
         >
             <div className={`w-full h-full flex items-end justify-center ${avatarState.isLoading ? 'opacity-0 scale-90' : 'opacity-100 scale-100'} transition-all duration-700`}>
@@ -89,34 +103,34 @@ export const AvatarDisplay: React.FC<AvatarDisplayProps> = ({
                 )}
             </div>
 
-            {/* Hidden Interaction Zones (Talking Tom Style) */}
+            {/* Talking Tom Style Interaction Zones */}
             <div className="absolute inset-0 z-20 grid grid-rows-3 pointer-events-auto">
-                <div onClick={() => onInteraction?.('head')} className="cursor-pointer active:bg-white/5 transition-colors"></div>
-                <div onClick={() => onInteraction?.('belly')} className="cursor-pointer active:bg-white/5 transition-colors"></div>
-                <div onClick={() => onInteraction?.('feet')} className="cursor-pointer active:bg-white/5 transition-colors"></div>
+                <div onClick={(e) => handleTouch('head', e)} className="cursor-pointer active:bg-white/5 transition-colors"></div>
+                <div onClick={(e) => handleTouch('belly', e)} className="cursor-pointer active:bg-white/5 transition-colors"></div>
+                <div onClick={(e) => handleTouch('feet', e)} className="cursor-pointer active:bg-white/5 transition-colors"></div>
             </div>
         </div>
       
         <style>{`
             @keyframes memoryRipple {
                 0% { transform: scale(1); opacity: 0.8; }
-                50% { transform: scale(1.1); opacity: 0.4; }
+                50% { transform: scale(1.15); opacity: 0.3; }
                 100% { transform: scale(1); opacity: 0.8; }
             }
             @keyframes pulseFast {
                 0% { opacity: 0.6; transform: scale(0.98); }
-                50% { opacity: 1; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.02); }
                 100% { opacity: 0.6; transform: scale(0.98); }
             }
             @keyframes talking-wiggle {
-                0% { transform: rotate(0deg); }
-                25% { transform: rotate(0.5deg) scale(1.005); }
-                50% { transform: rotate(-0.5deg); }
-                75% { transform: rotate(0.5deg); }
-                100% { transform: rotate(0deg); }
+                0% { transform: rotate(0deg) scale(1); }
+                25% { transform: rotate(1deg) scale(1.01); }
+                50% { transform: rotate(-1deg) scale(1); }
+                75% { transform: rotate(1deg) scale(1.01); }
+                100% { transform: rotate(0deg) scale(1); }
             }
             .animate-talking-wiggle {
-                animation: talking-wiggle 0.2s infinite ease-in-out;
+                animation: talking-wiggle 0.15s infinite ease-in-out;
             }
         `}</style>
     </div>
